@@ -32,8 +32,10 @@ client = genai.Client(
     api_key=os.getenv("GEMINI_API_KEY")
 )
 
-def extract_shopping_intent(user_message: str) -> ShoppingIntent:
-
+def extract_shopping_intent(
+    user_message: str,
+    previous_intent: ShoppingIntent | None = None
+) -> ShoppingIntent:
     prompt = f"""
 You are the Buyer Agent for AgentPay, an AI-native shopping platform.
 
