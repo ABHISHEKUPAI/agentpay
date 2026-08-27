@@ -118,5 +118,22 @@ def build_merchant_baskets(
 
     return baskets
 
+def choose_best_merchant_basket(
+    merchant_baskets
+):
+    valid_baskets = [
+        basket
+        for basket in merchant_baskets
+        if basket["within_budget"]
+    ]
+
+    if not valid_baskets:
+        return None
+
+    return min(
+        valid_baskets,
+        key=lambda basket: basket["total"]
+    )
+
 if __name__ == "__main__":
     print("Shopping service loaded")

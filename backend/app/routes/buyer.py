@@ -6,7 +6,8 @@ from app.core.database import SessionLocal
 from app.services.buyer_agent import extract_shopping_intent
 from app.services.shopping_service import (
     build_recommendation,
-    build_merchant_baskets
+    build_merchant_baskets,
+    choose_best_merchant_basket
 )
 router = APIRouter(
     prefix="/buyer",
@@ -105,3 +106,20 @@ def recommend_products(
 
         "budget": intent.budget
     }
+
+def choose_best_merchant_basket(
+    merchant_baskets
+):
+    valid_baskets = [
+        basket
+        for basket in merchant_baskets
+        if basket["within_budget"]
+    ]
+
+    if not valid_baskets:
+        return None
+
+    return min(
+        valid_baskets,
+        key=lambda basket: basket["total"]
+    )
