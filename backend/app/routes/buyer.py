@@ -168,6 +168,23 @@ def buyer_chat(
             "conversation_id": request.conversation_id,
             "message": state.pending_question
         }
+    # If experience and product level are both missing,
+    # ask what level of product the user expects.
+    if (
+        intent.experience is None
+        and intent.product_level is None
+    ):
+
+        state.pending_question = (
+            "What level of product are you looking for — "
+            "basic, standard, premium, or performance-oriented?"
+        )
+
+        return {
+            "status": "need_more_information",
+            "conversation_id": request.conversation_id,
+            "message": state.pending_question
+        }
 
     # Build product recommendation
     products, total = build_recommendation(
@@ -193,12 +210,13 @@ def buyer_chat(
         "status": "complete",
         "conversation_id": request.conversation_id,
 
-        "intent": {
-            "goal": intent.goal,
-            "experience": intent.experience,
-            "budget": intent.budget,
-            "categories": intent.categories
-        },
+    "intent": {
+        "goal": intent.goal,
+        "experience": intent.experience,
+        "product_level": intent.product_level,
+        "budget": intent.budget,
+        "categories": intent.categories
+    },
 
         "products": [
             {
