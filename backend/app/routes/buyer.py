@@ -5,11 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
 from app.services.buyer_agent import extract_shopping_intent
 from app.services.conversation import get_conversation
-from app.services.shopping_service import (
-    build_recommendation,
-    build_merchant_baskets,
-    choose_best_merchant_basket
-)
+from app.services.shopping_service import build_recommendation
 
 
 router = APIRouter(
@@ -17,6 +13,10 @@ router = APIRouter(
     tags=["Buyer Agent"]
 )
 
+
+# =========================================================
+# Request Models
+# =========================================================
 
 class BuyerRequest(BaseModel):
     message: str
@@ -27,31 +27,47 @@ class BuyerChatRequest(BaseModel):
     message: str
 
 
+# =========================================================
+# Database Dependency
+# =========================================================
+
 def get_db():
     db = SessionLocal()
-
     try:
         yield db
     finally:
         db.close()
 
 
+# =========================================================
+# POST /buyer/intent
+# =========================================================
+
 @router.post("/intent")
 def extract_intent(
     request: BuyerRequest
 ):
+    """
+    Extract the user's shopping intent.
+    """
     intent = extract_shopping_intent(
         request.message
     )
-
     return intent
 
+
+# =========================================================
+# POST /buyer/recommend
+# =========================================================
 
 @router.post("/recommend")
 def recommend_products(
     request: BuyerRequest,
     db: Session = Depends(get_db)
 ):
+    """
+    Generate product recommendations across all available merchants.
+    """
     # 1. Understand user
     intent = extract_shopping_intent(
         request.message
@@ -64,183 +80,130 @@ def recommend_products(
             "message": "What is your maximum budget?"
         }
 
-    # 3. Best individual products
-    products, total = build_recommendation(
+    # 3. Ask for experience level if missing
+    if (
+        intent.experience is None
+        and intent.product_level is None
+    ):
+        return {
+            "status": "need_more_information",
+            "message": "Are you a beginner runner or an experienced/pro runner?"
+        }
+
+    # 4. Generate recommendations
+    rec = build_recommendation(
         db=db,
+        main_category=intent.main_category,
+        related_categories=intent.related_categories,
         categories=intent.categories,
         budget=intent.budget,
-        experience=intent.experience
+        experience=intent.experience,
+        product_level=intent.product_level
     )
 
-    # 4. Best complete basket from each merchant
-    merchant_baskets = build_merchant_baskets(
-        db=db,
-        categories=intent.categories,
-        budget=intent.budget
-    )
-
-    # 5. Best merchant
-    best_merchant = choose_best_merchant_basket(
-        merchant_baskets
-    )
-
+    # 5. Return audit-ready result
     return {
-        "intent": intent,
-
-        "best_individual_products": [
-            {
-                "id": product.id,
-                "merchant_id": product.merchant_id,
-                "name": product.name,
-                "category": product.category,
-                "price": product.price,
-                "rating": product.rating
-            }
-            for product in products
-        ],
-
-        "individual_total": total,
-
-        "merchant_baskets": [
-            {
-                "merchant_id": basket["merchant_id"],
-                "merchant": basket["merchant"],
-
-                "products": [
-                    {
-                        "id": product.id,
-                        "name": product.name,
-                        "category": product.category,
-                        "price": product.price,
-                        "rating": product.rating
-                    }
-                    for product in basket["products"]
-                ],
-
-                "total": basket["total"],
-                "within_budget": basket["within_budget"]
-            }
-            for basket in merchant_baskets
-        ],
-
-        "best_merchant": (
-            {
-                "merchant_id": best_merchant["merchant_id"],
-                "merchant": best_merchant["merchant"],
-                "total": best_merchant["total"]
-            }
-            if best_merchant
-            else None
-        ),
-
-        "budget": intent.budget
+        "status": rec["status"],
+        "message": rec["message"],
+        "intent": {
+            "goal": intent.goal,
+            "main_category": intent.main_category,
+            "related_categories": intent.related_categories,
+            "experience": intent.experience,
+            "product_level": intent.product_level,
+            "budget": intent.budget,
+            "categories": intent.categories
+        },
+        "main_product": rec["main_product"],
+        "cross_sells": rec["cross_sells"],
+        "products": rec["products"],
+        "total": rec["total"],
+        "budget": intent.budget,
+        "missing_categories": rec["missing_categories"],
+        "checkout_gated": rec.get("checkout_gated", True)
     }
 
+
+# =========================================================
+# POST /buyer/chat
+# =========================================================
 
 @router.post("/chat")
 def buyer_chat(
     request: BuyerChatRequest,
     db: Session = Depends(get_db)
 ):
-    # Get conversation state
+    """
+    Main conversational Buyer Agent.
+    """
+    # 1. Get conversation state
     state = get_conversation(
         request.conversation_id
     )
 
-    # Extract intent from current message
+    # 2. Extract intent using previous state context
     intent = extract_shopping_intent(
         request.message,
         state.intent
     )
 
-    # Save intent in conversation state
+    # 3. Save updated intent
     state.intent = intent
 
-    # If budget is missing, ask user
+    # 4. Ask for budget if missing
     if intent.budget is None:
-
-        state.pending_question = (
-            "What is your maximum budget?"
-        )
-
+        state.pending_question = "What is your maximum budget?"
         return {
             "status": "need_more_information",
             "conversation_id": request.conversation_id,
             "message": state.pending_question
         }
-    # If experience and product level are both missing,
-    # ask what level of product the user expects.
+
+    # 5. Ask for experience level if missing
     if (
         intent.experience is None
         and intent.product_level is None
     ):
-
-        state.pending_question = (
-            "What level of product are you looking for — "
-            "basic, standard, premium, or performance-oriented?"
-        )
-
+        state.pending_question = "Are you a beginner runner or an experienced/pro runner?"
         return {
             "status": "need_more_information",
             "conversation_id": request.conversation_id,
             "message": state.pending_question
         }
 
-    # Build product recommendation
-    products, total = build_recommendation(
+    # 6. Build recommendation
+    rec = build_recommendation(
         db=db,
+        main_category=intent.main_category,
+        related_categories=intent.related_categories,
         categories=intent.categories,
         budget=intent.budget,
-        experience=intent.experience
+        experience=intent.experience,
+        product_level=intent.product_level
     )
 
-    # Build merchant baskets
-    merchant_baskets = build_merchant_baskets(
-        db=db,
-        categories=intent.categories,
-        budget=intent.budget
-    )
+    # 7. Clear pending question
+    state.pending_question = None
 
-    # Select best merchant
-    best_merchant = choose_best_merchant_basket(
-        merchant_baskets
-    )
-
+    # 8. Return complete recommendation
     return {
-        "status": "complete",
+        "status": rec["status"],
         "conversation_id": request.conversation_id,
-
-    "intent": {
-        "goal": intent.goal,
-        "experience": intent.experience,
-        "product_level": intent.product_level,
+        "message": rec["message"],
+        "intent": {
+            "goal": intent.goal,
+            "main_category": intent.main_category,
+            "related_categories": intent.related_categories,
+            "experience": intent.experience,
+            "product_level": intent.product_level,
+            "budget": intent.budget,
+            "categories": intent.categories
+        },
+        "main_product": rec["main_product"],
+        "cross_sells": rec["cross_sells"],
+        "products": rec["products"],
+        "total": rec["total"],
         "budget": intent.budget,
-        "categories": intent.categories
-    },
-
-        "products": [
-            {
-                "id": product.id,
-                "merchant_id": product.merchant_id,
-                "name": product.name,
-                "category": product.category,
-                "price": product.price,
-                "rating": product.rating
-            }
-            for product in products
-        ],
-
-        "total": total,
-
-        "best_merchant": (
-            {
-                "merchant_id": best_merchant["merchant_id"],
-                "merchant": best_merchant["merchant"],
-                "total": best_merchant["total"]
-            }
-            if best_merchant
-            else None
-        ),
-
-        "budget": intent.budget
+        "missing_categories": rec["missing_categories"],
+        "checkout_gated": rec.get("checkout_gated", True)
     }

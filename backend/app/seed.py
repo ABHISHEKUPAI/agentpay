@@ -27,33 +27,43 @@ db.refresh(fitgear)
 fitgear_products = [
     Product(
         merchant_id=fitgear.id,
+        name="SpeedRunner Pro",
+        category="running_shoes",
+        price=4299,
+        cost=3100,
+        stock=20,
+        rating=4.6,
+        attributes="experienced,road,performance"
+    ),
+    Product(
+        merchant_id=fitgear.id,
         name="Velocity Runner",
         category="running_shoes",
-        price=3299,
-        cost=2600,
-        stock=23,
-        rating=4.5,
-        attributes="beginner,road"
-    ),
-    Product(
-        merchant_id=fitgear.id,
-        name="Performance Running Shirt",
-        category="running_shirt",
-        price=699,
-        cost=450,
-        stock=30,
-        rating=4.3,
-        attributes="beginner,breathable"
-    ),
-    Product(
-        merchant_id=fitgear.id,
-        name="Running Shorts",
-        category="running_shorts",
-        price=499,
-        cost=300,
+        price=2499,
+        cost=1800,
         stock=25,
-        rating=4.4,
-        attributes="beginner,lightweight"
+        rating=4.1,
+        attributes="beginner,budget,road"
+    ),
+    Product(
+        merchant_id=fitgear.id,
+        name="Pro Thermo Performance Shirt",
+        category="running_shirt",
+        price=999,
+        cost=650,
+        stock=20,
+        rating=4.7,
+        attributes="experienced,pro,moisture_wicking"
+    ),
+    Product(
+        merchant_id=fitgear.id,
+        name="Carbon Ultra Shorts",
+        category="running_shorts",
+        price=899,
+        cost=550,
+        stock=18,
+        rating=4.8,
+        attributes="experienced,pro,lightweight"
     ),
     Product(
         merchant_id=fitgear.id,
@@ -62,7 +72,7 @@ fitgear_products = [
         price=249,
         cost=149,
         stock=40,
-        rating=4.6,
+        rating=4.5,
         attributes="running,breathable"
     )
 ]
@@ -118,13 +128,13 @@ runpro_products = [
     ),
     Product(
         merchant_id=runpro.id,
-        name="RunPro Performance Socks",
+        name="Pro Elite Compression Socks",
         category="running_socks",
-        price=299,
-        cost=180,
-        stock=45,
-        rating=4.5,
-        attributes="running,breathable"
+        price=499,
+        cost=300,
+        stock=30,
+        rating=4.8,
+        attributes="experienced,pro,compression"
     )
 ]
 
@@ -149,13 +159,13 @@ db.refresh(athletehub)
 athletehub_products = [
     Product(
         merchant_id=athletehub.id,
-        name="Road Runner Pro",
+        name="Ultra Pro Carbon Shoe",
         category="running_shoes",
-        price=3799,
-        cost=3000,
+        price=4899,
+        cost=3800,
         stock=15,
-        rating=4.7,
-        attributes="beginner,road,premium"
+        rating=4.8,
+        attributes="experienced,pro,carbon_plate,road"
     ),
     Product(
         merchant_id=athletehub.id,
@@ -185,12 +195,11 @@ athletehub_products = [
         cost=110,
         stock=50,
         rating=4.7,
-        attributes="running,breathable"
+        attributes="beginner,breathable,value"
     )
 ]
 
 db.add_all(athletehub_products)
-
 
 # Save everything
 db.commit()

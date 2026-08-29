@@ -6,24 +6,25 @@ from app.models.merchant import Merchant
 
 
 class RecommendedProduct(BaseModel):
-    product_id: int
+    id: int
     merchant_id: int
+    merchant_name: str
     name: str
     category: str
     price: float
     rating: float
+    reason: str
 
 
 def search_products(
     db: Session,
     category: str,
     max_price: float | None = None
-):
+) -> list[Product]:
     """
-    Find products in a category that are in stock.
-    Optionally restrict by maximum price.
+    Find all available in-stock products for a category
+    across every merchant.
     """
-
     query = db.query(Product).filter(
         Product.category == category,
         Product.stock > 0
@@ -37,215 +38,220 @@ def search_products(
     return query.all()
 
 
-def score_product(
-    product: Product,
-    experience: str | None = None,
-    budget: float | None = None
-):
-    """
-    Give a product a score based on:
-    - rating
-    - experience match
-    - price/value
-    """
-
-    score = 0.0
-
-    # -----------------------------------------
-    # 1. Rating score
-    # -----------------------------------------
-
-    score += product.rating * 10
-
-    # -----------------------------------------
-    # 2. Experience match
-    # -----------------------------------------
-
-    if experience:
-        attributes = (
-            product.attributes or ""
-        ).lower()
-
-        if experience.lower() in attributes:
-            score += 20
-
-    # -----------------------------------------
-    # 3. Price/value score
-    # -----------------------------------------
-
-    if budget and budget > 0:
-
-        price_ratio = product.price / budget
-
-        if price_ratio <= 0.5:
-            score += 10
-
-        elif price_ratio <= 0.75:
-            score += 7
-
-        elif price_ratio <= 1.0:
-            score += 4
-
-    return score
-
-
 def build_recommendation(
     db: Session,
-    categories: list[str],
-    budget: float,
-    experience: str | None = None
+    main_category: str | None = None,
+    related_categories: list[str] | None = None,
+    categories: list[str] | None = None,
+    budget: float | None = None,
+    experience: str | None = None,
+    product_level: str | None = None
 ):
     """
-    Find the best product for each required category.
-    Products are ranked using the scoring system.
+    Primary AI Buyer Agent Recommendation Logic.
+    
+    1. Main product:
+       - Selected from main_category (or first category in categories).
+       - MUST be in stock and price <= budget.
+       - Maximizes budget utilization while considering product rating & user experience.
+       
+    2. Cross-sells:
+       - Selected from related_categories across all available merchants.
+       - Beginner: favors low-cost, practical, high-value options.
+       - Experienced/Pro: favors premium, top-rated, performance options.
     """
+    if related_categories is None:
+        related_categories = []
 
-    selected_products = []
-    total = 0.0
+    if categories is None:
+        categories = []
 
-    if not categories:
-        return selected_products, total
+    # Determine main category
+    if not main_category:
+        if categories:
+            main_category = categories[0]
+            related_categories = categories[1:]
+        else:
+            main_category = "running_shoes"
 
-    # Give each category a reasonable portion
-    # of the total budget.
-    category_budget = budget / len(categories)
+    # Ensure related categories don't duplicate main category
+    related_categories = [c for c in related_categories if c != main_category]
 
-    for category in categories:
+    missing_categories = []
 
-        products = search_products(
-            db=db,
-            category=category,
-            max_price=budget
-        )
+    # Pre-fetch merchants for quick name lookup
+    merchants = {m.id: m.name for m in db.query(Merchant).all()}
 
-        if not products:
+    # Normalize experience
+    exp_clean = (experience or "").lower().strip()
+    is_pro = exp_clean in {"experienced", "pro", "professional"}
+    is_beginner = exp_clean == "beginner"
+
+    # =========================================================
+    # 1. MAIN PRODUCT RECOMMENDATION
+    # =========================================================
+
+    main_candidates = search_products(
+        db=db,
+        category=main_category,
+        max_price=budget
+    )
+
+    if not main_candidates:
+        # Handle failure gracefully (Requirement 14 & Test E)
+        return {
+            "status": "no_products_found",
+            "message": f"No suitable {main_category.replace('_', ' ')} were found within your ₹{int(budget) if budget else 0} budget.",
+            "main_product": None,
+            "cross_sells": [],
+            "products": [],
+            "total": 0.0,
+            "budget": budget,
+            "missing_categories": [main_category] + related_categories
+        }
+
+    # Score main candidates: prefer highest-priced suitable option within budget, using rating as quality signal
+    def score_main_product(p: Product):
+        price_ratio = (p.price / budget) if (budget and budget > 0) else 0.5
+        rating = p.rating or 0.0
+        attrs = (p.attributes or "").lower()
+
+        if is_pro:
+            pro_bonus = 15 if ("pro" in attrs or "experienced" in attrs or "carbon" in attrs) else 0
+            return (price_ratio * 40) + (rating * 12) + pro_bonus
+        elif is_beginner:
+            return (price_ratio * 30) + (rating * 10)
+        else:
+            return (price_ratio * 35) + (rating * 10)
+
+    main_candidates.sort(key=score_main_product, reverse=True)
+    chosen_main = main_candidates[0]
+    chosen_main_merchant = merchants.get(chosen_main.merchant_id, f"Merchant #{chosen_main.merchant_id}")
+
+    exp_label = "experienced/pro" if is_pro else ("beginner" if is_beginner else "runner")
+    main_reason = (
+        f"You specified a ₹{int(budget) if budget else 0} budget. "
+        f"The {chosen_main.name} from {chosen_main_merchant} at ₹{int(chosen_main.price)} is the top-suited "
+        f"option within your budget limit with a rating of {chosen_main.rating}, making it a strong choice for a {exp_label}."
+    )
+
+    main_prod_dict = {
+        "id": chosen_main.id,
+        "merchant_id": chosen_main.merchant_id,
+        "merchant_name": chosen_main_merchant,
+        "name": chosen_main.name,
+        "category": chosen_main.category,
+        "price": chosen_main.price,
+        "rating": chosen_main.rating,
+        "selection_reason": main_reason
+    }
+
+    # =========================================================
+    # 2. CROSS-SELL / UPSELL RECOMMENDATION
+    # =========================================================
+
+    cross_sells = []
+    total = chosen_main.price
+
+    for cat in related_categories:
+        cat_candidates = search_products(db=db, category=cat)
+
+        if not cat_candidates:
+            missing_categories.append(cat)
             continue
 
-        # -----------------------------------------
-        # Score every product
-        # -----------------------------------------
+        if is_beginner:
+            # Beginner cross-sell: favor low cost, practical, good value
+            cat_candidates.sort(key=lambda p: (p.price, -p.rating))
+            chosen_cs = cat_candidates[0]
+            cs_merchant = merchants.get(chosen_cs.merchant_id, f"Merchant #{chosen_cs.merchant_id}")
+            cs_reason = (
+                f"These {chosen_cs.name} (₹{int(chosen_cs.price)} from {cs_merchant}) are a practical, low-cost "
+                f"addition that keeps your additional spend low while starting out."
+            )
+        elif is_pro:
+            # Pro cross-sell: favor top rating, premium attributes, higher quality
+            def score_pro_cs(p: Product):
+                attrs = (p.attributes or "").lower()
+                pro_bonus = 10 if ("pro" in attrs or "experienced" in attrs or "compression" in attrs) else 0
+                return (p.rating * 15) + (p.price * 0.005) + pro_bonus
 
-        scored_products = []
-
-        for product in products:
-
-            score = score_product(
-                product=product,
-                experience=experience,
-                budget=category_budget
+            cat_candidates.sort(key=score_pro_cs, reverse=True)
+            chosen_cs = cat_candidates[0]
+            cs_merchant = merchants.get(chosen_cs.merchant_id, f"Merchant #{chosen_cs.merchant_id}")
+            cs_reason = (
+                f"These {chosen_cs.name} (₹{int(chosen_cs.price)} from {cs_merchant}) offer high performance "
+                f"with a {chosen_cs.rating} rating to complement your pro running setup."
+            )
+        else:
+            # Standard cross-sell
+            cat_candidates.sort(key=lambda p: -p.rating)
+            chosen_cs = cat_candidates[0]
+            cs_merchant = merchants.get(chosen_cs.merchant_id, f"Merchant #{chosen_cs.merchant_id}")
+            cs_reason = (
+                f"These {chosen_cs.name} (₹{int(chosen_cs.price)} from {cs_merchant}) have a strong rating of "
+                f"{chosen_cs.rating} and complement your purchase."
             )
 
-            scored_products.append(
-                (product, score)
-            )
-
-        # -----------------------------------------
-        # Highest scoring products first
-        # -----------------------------------------
-
-        scored_products.sort(
-            key=lambda item: item[1],
-            reverse=True
-        )
-
-        # -----------------------------------------
-        # Choose the highest scoring product
-        # that keeps the entire basket within budget.
-        # -----------------------------------------
-
-        chosen = None
-
-        for product, score in scored_products:
-
-            if total + product.price <= budget:
-                chosen = product
-                break
-
-        if chosen:
-
-            selected_products.append(
-                chosen
-            )
-
-            total += chosen.price
-
-    return selected_products, total
-
-
-def build_merchant_baskets(
-    db: Session,
-    categories: list[str],
-    budget: float
-):
-    """
-    Build a complete shopping basket for every merchant.
-    """
-
-    merchants = db.query(Merchant).all()
-
-    baskets = []
-
-    for merchant in merchants:
-
-        products = []
-
-        for category in categories:
-
-            category_products = db.query(Product).filter(
-                Product.merchant_id == merchant.id,
-                Product.category == category,
-                Product.stock > 0
-            ).all()
-
-            if not category_products:
-                continue
-
-            # Choose the highest-rated product
-            # from this merchant/category.
-            product = max(
-                category_products,
-                key=lambda p: p.rating
-            )
-
-            products.append(product)
-
-        total = sum(
-            product.price
-            for product in products
-        )
-
-        baskets.append({
-            "merchant_id": merchant.id,
-            "merchant": merchant.name,
-            "products": products,
-            "total": total,
-            "within_budget": total <= budget
+        cross_sells.append({
+            "id": chosen_cs.id,
+            "merchant_id": chosen_cs.merchant_id,
+            "merchant_name": cs_merchant,
+            "name": chosen_cs.name,
+            "category": chosen_cs.category,
+            "price": chosen_cs.price,
+            "rating": chosen_cs.rating,
+            "cross_sell_reason": cs_reason
         })
 
-    return baskets
+        total += chosen_cs.price
 
-
-def choose_best_merchant_basket(
-    merchant_baskets
-):
-    """
-    Choose the cheapest complete basket
-    that fits within the user's budget.
-    """
-
-    valid_baskets = [
-        basket
-        for basket in merchant_baskets
-        if basket["within_budget"]
+    # Flattened list for backwards compatibility
+    all_products = [
+        {
+            "id": chosen_main.id,
+            "merchant_id": chosen_main.merchant_id,
+            "merchant_name": chosen_main_merchant,
+            "name": chosen_main.name,
+            "category": chosen_main.category,
+            "price": chosen_main.price,
+            "rating": chosen_main.rating
+        }
+    ] + [
+        {
+            "id": cs["id"],
+            "merchant_id": cs["merchant_id"],
+            "merchant_name": cs["merchant_name"],
+            "name": cs["name"],
+            "category": cs["category"],
+            "price": cs["price"],
+            "rating": cs["rating"]
+        }
+        for cs in cross_sells
     ]
 
-    if not valid_baskets:
-        return None
-
-    return min(
-        valid_baskets,
-        key=lambda basket: basket["total"]
+    # Summary text
+    summary_message = (
+        f"I've selected the {chosen_main.name} (₹{int(chosen_main.price)} from {chosen_main_merchant}) "
+        f"as your main product within your ₹{int(budget) if budget else 0} budget. "
     )
+    if cross_sells:
+        cs_names = ", ".join([f"{cs['name']} (₹{int(cs['price'])})" for cs in cross_sells])
+        summary_message += f"I also recommend these complementary items: {cs_names}. "
+
+    summary_message += f"Total: ₹{int(total)}. Would you like to proceed to checkout?"
+
+    return {
+        "status": "complete",
+        "message": summary_message,
+        "main_product": main_prod_dict,
+        "cross_sells": cross_sells,
+        "products": all_products,
+        "total": total,
+        "budget": budget,
+        "missing_categories": missing_categories,
+        "checkout_gated": True
+    }
 
 
 if __name__ == "__main__":
