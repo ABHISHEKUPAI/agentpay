@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentPay - AI Growth & Agentic Commerce Platform</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Navigation -->
+        <header class="navbar">
+            <div class="logo">
+                <span class="logo-icon">⚡</span>
+                <span class="logo-text">Agent<span class="highlight">Pay</span></span>
+                <span class="tag">AI Commerce Engine</span>
+            </div>
+            
+            <nav class="nav-tabs">
+                <button class="tab-btn active" id="tab-shopper" onclick="switchTab('shopper')">
+                    💬 Shopper AI Agent
+                </button>
+                <button class="tab-btn" id="tab-merchant" onclick="switchTab('merchant')">
+                    📈 Revenue & Recovery Dashboard
+                </button>
+            </nav>
+
+            <div class="header-badges">
+                <span class="badge badge-success">● Razorpay Test Mode</span>
+                <span class="badge badge-info">● Audit Trail Gated</span>
+            </div>
+        </header>
+
+        <!-- Tab 1: Shopper AI Agent -->
+        <main class="tab-content active" id="content-shopper">
+            <div class="shopper-grid">
+                <!-- Chat & Recommendation Section -->
+                <div class="chat-card">
+                    <div class="chat-header">
+                        <h2>Conversational Commerce Agent</h2>
+                        <p>Ask for products, explore handpicked setups, and enjoy automated savings.</p>
+                    </div>
+
+                    <!-- Quick Preset Prompts -->
+                    <div class="preset-chips">
+                        <button class="chip" onclick="sendPreset('I need a badminton racket under 3000 rupees')">🏸 Badminton Racket (₹3000)</button>
+                        <button class="chip" onclick="sendPreset('I need football gear for a beginner under 4000')">⚽ Football Gear (₹4000)</button>
+                        <button class="chip" onclick="sendPreset('I need cricket gear for an experienced player')">🏏 Cricket Gear (Experienced)</button>
+                        <button class="chip" onclick="sendPreset('I need running shoes for budget 5000')">🏃 Running Setup (₹5000)</button>
+                        <button class="chip" onclick="sendPreset('I need swimming gear under 2500')">🏊 Swimming Kit (₹2500)</button>
+                        <button class="chip" onclick="sendPreset('Find a better deal')">🏷️ Find a Better Deal</button>
+                    </div>
+
+                    <!-- Messages Stream -->
+                    <div class="chat-messages" id="chat-messages">
+                        <div class="message message-bot">
+                            <div class="bot-avatar">🤖</div>
+                            <div class="message-content">
+                                Hello! Welcome to AgentPay. I am your General Sports Shopping AI Agent. Tell me which sport you're playing (Badminton, Football, Cricket, Tennis, Swimming, Running, etc.) and your budget, and I'll find the best setup for you!
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Input Bar -->
+                    <div class="chat-input-bar">
+                        <input type="text" id="user-input" placeholder="e.g. I need a badminton racket under 3000 rupees" onkeydown="if(event.key==='Enter') sendMessage()">
+                        <button class="btn-send" onclick="sendMessage()">Send</button>
+                    </div>
+
+                </div>
+
+                <!-- Side Panel: Live Cart & Razorpay Checkout -->
+                <div class="cart-side-panel">
+                    <div class="panel-header">
+                        <h3>🛍️ Your Order & Cart</h3>
+                        <span class="cart-count-badge" id="cart-count">0 items</span>
+                    </div>
+
+                    <div class="cart-items-list" id="cart-items-list">
+                        <div class="empty-cart">
+                            <span class="empty-icon">🛒</span>
+                            <p>Your cart is empty. Select products from the chat agent to start building your order!</p>
+                        </div>
+                    </div>
+
+                    <div class="cart-summary" id="cart-summary" style="display: none;">
+                        <div class="summary-row">
+                            <span>Subtotal (List Price):</span>
+                            <span id="summary-subtotal">₹0</span>
+                        </div>
+                        <div class="summary-row discount-row">
+                            <span>Total Savings & Discounts:</span>
+                            <span id="summary-savings">-₹0</span>
+                        </div>
+                        <hr class="divider">
+                        <div class="summary-row total-row">
+                            <span>Final Amount Payable:</span>
+                            <span id="summary-final">₹0</span>
+                        </div>
+
+                        <button class="btn-checkout" onclick="openRazorpayCheckout()">
+                            💳 Pay via Razorpay Test Mode
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Tab 2: Merchant AI Growth & Recovery Dashboard -->
+        <main class="tab-content" id="content-merchant">
+            <div class="merchant-dashboard">
+                <!-- Metrics Bar -->
+                <div class="metrics-grid">
+                    <div class="metric-card glass">
+                        <div class="metric-title">Total Revenue Generated</div>
+                        <div class="metric-value" id="metric-revenue">₹13,393</div>
+                        <div class="metric-sub">Across 3 Partner Merchants</div>
+                    </div>
+                    <div class="metric-card glass highlight-card">
+                        <div class="metric-title">AI Recovered Revenue</div>
+                        <div class="metric-value" id="metric-recovered">₹5,128</div>
+                        <div class="metric-sub">From Abandoned Checkouts</div>
+                    </div>
+                    <div class="metric-card glass">
+                        <div class="metric-title">Recovery Rate</div>
+                        <div class="metric-value" id="metric-conversion">66.7%</div>
+                        <div class="metric-sub">Stopping Rules Enforced</div>
+                    </div>
+                    <div class="metric-card glass">
+                        <div class="metric-title">Active AI Policy Caps</div>
+                        <div class="metric-value">15% Discount</div>
+                        <div class="metric-sub">Min Margin 80% Guaranteed</div>
+                    </div>
+                </div>
+
+                <div class="dashboard-sections">
+                    <!-- Abandoned Carts Table -->
+                    <div class="dashboard-card">
+                        <div class="card-header">
+                            <h3>🚨 Abandoned Cart Detection & Recovery Interventions</h3>
+                            <button class="btn-sm" onclick="fetchAbandonedCarts()">Refresh List</button>
+                        </div>
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Session ID</th>
+                                        <th>Goal</th>
+                                        <th>Potential Revenue</th>
+                                        <th>Savings Left</th>
+                                        <th>Status</th>
+                                        <th>Intervention</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="abandoned-table-body">
+                                    <!-- Populated via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- AI Audit Trail Log Stream -->
+                    <div class="dashboard-card">
+                        <div class="card-header">
+                            <h3>🔍 Bounded Money Action Audit Log Stream</h3>
+                            <span class="tag-sm">Realtime Policy Verification</span>
+                        </div>
+                        <pre class="audit-log-viewer" id="audit-log-viewer">
+Loading live AI Audit Logs...
+                        </pre>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Razorpay Simulated Modal -->
+    <div class="modal-overlay" id="rzp-modal" style="display: none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <span class="rzp-logo">Razorpay <span class="test-tag">TEST MODE</span></span>
+                <button class="close-modal" onclick="closeRazorpayModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="order-summary-box">
+                    <p class="merchant-name">AgentPay AI Commerce</p>
+                    <h2 id="rzp-modal-amount">₹0</h2>
+                    <p class="order-id-label" id="rzp-modal-order-id">Order ID: order_test123</p>
+                </div>
+                <div class="payment-methods">
+                    <button class="pay-method-btn" onclick="simulatePaymentSuccess()">
+                        <span>💳 Pay with Test Card / UPI</span>
+                        <span class="arrow">→</span>
+                    </button>
+                </div>
+                <div class="rzp-security-note">
+                    🔒 Secured by Razorpay 256-bit Encryption • Audit Trail Logged
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
