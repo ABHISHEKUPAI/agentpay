@@ -166,11 +166,8 @@ def build_single_main_product(
                 "total_candidates": 0
             }
 
-    # Sort candidates: for beginners, overall value (rating desc, price asc); for experienced, performance (rating desc, price desc)
-    if (experience or "").lower() == "beginner":
-        candidates.sort(key=lambda p: (-p.rating, p.price))
-    else:
-        candidates.sort(key=lambda p: (-p.rating, -p.price))
+    # Sort candidates by rating and highest price within user budget first (top budget fit first)
+    candidates.sort(key=lambda p: (-p.rating, -p.price))
 
     current_idx = pointer % len(candidates)
     selected = candidates[current_idx]
@@ -178,13 +175,10 @@ def build_single_main_product(
 
     sp_str = (sport or "sports").capitalize()
     lines = []
-    lines.append(f"🏆 Top {sp_str} Recommendation (Option {current_idx + 1} of {len(candidates)}):\n")
+    lines.append(f"Top {sp_str} Recommendation (Option {current_idx + 1} of {len(candidates)}):\n")
     lines.append(f"• **{fmt['name']}** — **₹{int(fmt['price'])}** ({fmt['rating']}★ from {fmt['merchant_name']})")
     lines.append(f"• Why it fits your purpose: {fmt['personalized_need']}")
     lines.append(f"• Exclusive Deal: List Price ₹{fmt['original_price']} | Special Discount: {fmt['discount_percent']}% OFF | You Save: ₹{fmt['savings']}!\n")
-    lines.append("Please select an option:")
-    lines.append("• **Option 1**: Checkout")
-    lines.append("• **Option 2**: Show next product")
 
     return {
         "status": "main_product",
@@ -204,12 +198,6 @@ def build_crazy_deals_recommendations(
     experience: str | None = None,
     sport: str | None = None
 ):
-    """
-    Displays "We have got crazy deals just for you!" with add-on recommendations and 3 choices:
-    Option 1: Checkout all the products
-    Option 2: Select specific recommended products (e.g. 1, 2, or 1,2)
-    Option 3: Checkout without any recommended product
-    """
     merchant_map = {m.id: m for m in db.query(Merchant).all()}
     chosen_price = chosen_main.get("price", 0.0)
     remaining_budget = (budget - chosen_price) if (budget and budget > chosen_price) else None
@@ -228,23 +216,17 @@ def build_crazy_deals_recommendations(
         fmt["personalized_reason"] = get_personalized_recommendation_reason(p, sport=sport)
         formatted_recs.append(fmt)
 
-    # Sort add-ons least costly first
     formatted_recs.sort(key=lambda x: x["price"])
 
     sp_str = (sport or "sports").capitalize()
     lines = []
-    lines.append(f"🎉 **We have got crazy deals just for you!**\n")
-    lines.append(f"You selected **{chosen_main['name']}** (₹{int(chosen_main['price'])}). To maximize your {sp_str} performance, we've unlocked exclusive add-on deals:\n")
+    lines.append(f"**Exclusive Add-on Recommendations for Your Order**\n")
+    lines.append(f"You selected **{chosen_main['name']}** (₹{int(chosen_main['price'])}). To maximize your {sp_str} performance, we have unlocked these complementary add-on deals:\n")
 
     for idx, item in enumerate(formatted_recs, start=1):
         lines.append(f"{idx}. **{item['name']}** — **₹{int(item['price'])}** (from {item['merchant_name']})")
-        lines.append(f"   • Why you need this: {item['personalized_reason']}")
-        lines.append(f"   • Special Savings: List Price ₹{item['original_price']} | {item['discount_percent']}% OFF | You Save ₹{item['savings']}!\n")
-
-    lines.append("Please select how you would like to proceed:")
-    lines.append("• **Option 1**: Checkout all the products (Main item + All recommended add-ons)")
-    lines.append("• **Option 2**: Select specific recommended products (Enter item numbers e.g. '1' or '1, 2')")
-    lines.append("• **Option 3**: Checkout without any recommended product")
+        lines.append(f"   • Performance Benefit: {item['personalized_reason']}")
+        lines.append(f"   • Deal Terms: List Price ₹{item['original_price']} | {item['discount_percent']}% OFF | You Save ₹{item['savings']}!\n")
 
     return {
         "status": "crazy_deals",
@@ -262,13 +244,6 @@ def build_lower_priced_deals_recommendations(
     experience: str | None = None,
     sport: str | None = None
 ):
-    """
-    One-time lower-priced add-on deal presented after user declines initial recommendations,
-    offering 3 options:
-    Option 1: Checkout with recommended product
-    Option 2: Checkout with certain products (enter item numbers e.g. 1, 2, 3)
-    Option 3: Lets checkout (main item only)
-    """
     merchant_map = {m.id: m for m in db.query(Merchant).all()}
     formatted_lower = []
 
@@ -277,7 +252,6 @@ def build_lower_priced_deals_recommendations(
         if not items:
             continue
 
-        # Sort by lowest price first for budget-conscious value
         items.sort(key=lambda p: p.price)
         p = items[0]
         fmt = format_product_dict(p, merchant_map, sport=sport, experience=experience)
@@ -290,21 +264,16 @@ def build_lower_priced_deals_recommendations(
     main_val = int(chosen_main.get("price", 0))
 
     lines = []
-    lines.append("⚡ **EXCLUSIVE ONE-TIME DISCOUNT UNLOCKED FOR YOU!**\n")
+    lines.append("**Special Value Add-on Offer**\n")
     lines.append(
         f"Since you are completing your order for **{chosen_main['name']}** (₹{main_val}), "
-        f"we have unlocked an exclusive, lower-priced add-on deal strictly valid for this session:\n"
+        f"we have unlocked an exclusive, lower-priced add-on offer for this session:\n"
     )
 
     for idx, item in enumerate(formatted_lower, start=1):
         lines.append(f"{idx}. **{item['name']}** — **₹{int(item['price'])}** (from {item['merchant_name']})")
         lines.append(f"   • Essential Benefit: {item['personalized_reason']}")
         lines.append(f"   • Special Deal: List Price ₹{item['original_price']} | Saved ₹{item['savings']}!\n")
-
-    lines.append("Please select an option:")
-    lines.append("• **Option 1**: Checkout with recommended product")
-    lines.append("• **Option 2**: Checkout with certain products (Enter item numbers e.g. '1' or '1, 2')")
-    lines.append("• **Option 3**: Lets checkout (Main item only)")
 
     return {
         "status": "discounted_deals",
@@ -315,9 +284,6 @@ def build_lower_priced_deals_recommendations(
 
 
 def build_checkout_bill(cart: list[dict]):
-    """
-    Generate final itemized bill directly when user completes checkout.
-    """
     if not cart:
         return {
             "status": "complete",
@@ -333,7 +299,7 @@ def build_checkout_bill(cart: list[dict]):
 
     lines = []
     lines.append("========================================")
-    lines.append("🛍️ OFFICIAL CHECKOUT BILL & ORDER SUMMARY")
+    lines.append("OFFICIAL CHECKOUT BILL & ORDER SUMMARY")
     lines.append("========================================\n")
     lines.append("Items in Your Order:")
 
@@ -349,7 +315,7 @@ def build_checkout_bill(cart: list[dict]):
     lines.append(f"Your Total Savings: ₹{total_savings}")
     lines.append(f"Final Amount Payable: ₹{int(total_price)}")
     lines.append("----------------------------------------\n")
-    lines.append("✅ Order Confirmed! Ready for Razorpay Test Payment.")
+    lines.append("Order Confirmed! Ready for Razorpay Test Payment.")
 
     return {
         "status": "complete",
