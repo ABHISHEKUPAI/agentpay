@@ -4,20 +4,19 @@ const API_BASE = "http://localhost:8000";
 
 export default function ChatAgent({ conversationId, cart, setCart, setCurrentOrderData, updateAuditLog }) {
     const [inputMsg, setInputMsg] = useState("");
+    const [selectedItemIndices, setSelectedItemIndices] = useState([]);
     const [messages, setMessages] = useState([
         {
             sender: "bot",
-            text: "Welcome to AgentPay. I am your General Sports Shopping AI Agent. State your sport requirement and budget, and I will construct the optimal setup for you.",
+            text: "Welcome to AgentPay. I am your Sports-Commerce Shopping AI Agent. State your sport requirement and budget, and I will construct the optimal setup for you across partner merchants.",
             status: "initial"
         }
     ]);
-    const [latestBotState, setLatestBotState] = useState(null);
 
     const handleSend = async (textToSend) => {
         const query = textToSend || inputMsg;
         if (!query.trim()) return;
 
-        // Append user message
         const updatedMsgs = [...messages, { sender: "user", text: query }];
         setMessages(updatedMsgs);
         if (!textToSend) setInputMsg("");
@@ -33,7 +32,6 @@ export default function ChatAgent({ conversationId, cart, setCart, setCurrentOrd
             });
 
             const data = await res.json();
-            setLatestBotState(data);
 
             setMessages(prev => [
                 ...prev,
@@ -41,6 +39,7 @@ export default function ChatAgent({ conversationId, cart, setCart, setCurrentOrd
                     sender: "bot",
                     text: data.message,
                     status: data.status,
+                    action: data.action,
                     data: data
                 }
             ]);
@@ -49,7 +48,7 @@ export default function ChatAgent({ conversationId, cart, setCart, setCurrentOrd
                 setCart(data.cart);
             }
 
-            if (data.status === "complete" || data.razorpay_order) {
+            if (data.action === "PAYMENT_SUCCESS" || data.status === "complete" || data.razorpay_order) {
                 if (data.razorpay_order) setCurrentOrderData(data.razorpay_order);
                 if (data.audit_trail || data.razorpay_order?.audit_trail) {
                     updateAuditLog(data.audit_trail || data.razorpay_order?.audit_trail);
@@ -64,6 +63,24 @@ export default function ChatAgent({ conversationId, cart, setCart, setCurrentOrd
         }
     };
 
+    const toggleItemSelection = (idx) => {
+        const itemNo = idx + 1;
+        if (selectedItemIndices.includes(itemNo)) {
+            setSelectedItemIndices(selectedItemIndices.filter(i => i !== itemNo));
+        } else {
+            setSelectedItemIndices([...selectedItemIndices, itemNo]);
+        }
+    };
+
+    const handleAddSelectedItems = () => {
+        if (selectedItemIndices.length === 0) {
+            alert("Please select at least one item.");
+            return;
+        }
+        handleSend(selectedItemIndices.join(", "));
+        setSelectedItemIndices([]);
+    };
+
     const handlePreset = (presetText) => {
         handleSend(presetText);
     };
@@ -71,12 +88,9 @@ export default function ChatAgent({ conversationId, cart, setCart, setCurrentOrd
     return (
         <div class="chat-card">
             <div class="chat-header">
-                <h2>Conversational AI Buyer Agent</h2>
-                <p>Multi-merchant sports shopping, tailored trade-offs, and interactive checkout.</p>
+                <h2>Sports-Commerce AI Buyer Agent</h2>
+                <p>Multi-merchant product comparison, value trade-offs, and payment gating.</p>
             </div>
-
-            {/* Quick Sport Preset Chips */}
-           
 
             {/* Message Stream */}
             <div class="chat-messages">
@@ -86,67 +100,146 @@ export default function ChatAgent({ conversationId, cart, setCart, setCurrentOrd
                         <div class="message-content">
                             <div>{msg.text.split('\n').map((line, i) => <p key={i}>{line}</p>)}</div>
 
-                            {/* Render Interactive Action Buttons for Bot Responses */}
-                            {msg.sender === "bot" && msg.status === "main_product" && (
+                            {/* PRIMARY_OPTIONS buttons */}
+                            {msg.sender === "bot" && msg.action === "PRIMARY_OPTIONS" && (
                                 <div class="action-buttons-panel">
                                     <button class="btn-action-primary" onClick={() => handleSend('1')}>
-                                        Option 1: Checkout This Product
+                                        Choose Best-Value Recommendation
+                                    </button>
+                                    {msg.data?.options?.length > 1 && (
+                                        <button class="btn-action-secondary" onClick={() => handleSend('2')}>
+                                        Choose Best Product Within Budget
+                                        </button>
+                                    )}
+                                    <button class="btn-action-secondary" onClick={() => handleSend('3')}>
+                                        Explore Other Products
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* BUDGET_STRETCH_PROMPT button */}
+                            {msg.sender === "bot" && msg.action === "BUDGET_STRETCH_PROMPT" && (
+                                <div class="action-buttons-panel">
+                                    {msg.data?.options?.length > 1 ? (
+                                        <>
+                                            <button class="btn-action-primary" onClick={() => handleSend('1')}>
+                                                Approve Stretch & Proceed for Recommendation 1
+                                            </button>
+                                            <button class="btn-action-secondary" onClick={() => handleSend('2')}>
+                                                Approve Stretch & Proceed for Recommendation 2
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <button class="btn-action-primary" onClick={() => handleSend('1')}>
+                                            Approve Stretch & Proceed
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* ASK_PREFERENCE chips */}
+                            {msg.sender === "bot" && msg.action === "ASK_PREFERENCE" && (
+                                <div class="action-buttons-panel">
+                                    <div class="chip-actions-group">
+                                        <button class="btn-action-secondary" onClick={() => handleSend('Rating')}>
+                                            Highest Rating
+                                        </button>
+                                        <button class="btn-action-secondary" onClick={() => handleSend('Comfort')}>
+                                            Comfort & Cushioning
+                                        </button>
+                                        <button class="btn-action-secondary" onClick={() => handleSend('Performance')}>
+                                            Pro Performance
+                                        </button>
+                                        <button class="btn-action-secondary" onClick={() => handleSend('Price')}>
+                                            Cheapest Value
+                                        </button>
+                                        <button class="btn-action-secondary" onClick={() => handleSend('Durability')}>
+                                            Durability
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* CROSS_SELL_OPTIONS buttons */}
+                            {msg.sender === "bot" && msg.action === "CROSS_SELL_OPTIONS" && (
+                                <div class="action-buttons-panel">
+                                    <button class="btn-action-primary" onClick={() => handleSend('1')}>
+                                        Add All Recommended Products
                                     </button>
                                     <button class="btn-action-secondary" onClick={() => handleSend('2')}>
-                                        Option 2: Show Next Product
+                                        Select Individually
                                     </button>
-                                </div>
-                            )}
-
-                            {msg.sender === "bot" && msg.status === "crazy_deals" && (
-                                <div class="action-buttons-panel">
-                                    <button class="btn-action-primary" onClick={() => handleSend('1')}>
-                                        Option 1: Checkout All Recommended Products
-                                    </button>
-                                    <div class="chip-actions-group">
-                                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Select specific items:</span>
-                                        {msg.data?.recommended_products?.map((item, itemIdx) => (
-                                            <button key={itemIdx} class="btn-item-chip" onClick={() => handleSend(`${itemIdx + 1}`)}>
-                                                + Add Item #{itemIdx + 1} ({item.name})
-                                            </button>
-                                        ))}
-                                    </div>
                                     <button class="btn-action-decline" onClick={() => handleSend('3')}>
-                                        Option 3: Checkout Without Recommended Products
+                                        Checkout Without Recommendations
                                     </button>
                                 </div>
                             )}
 
-                            {msg.sender === "bot" && msg.status === "decline_reason" && (
+                            {/* INDIVIDUAL_SELECT_PROMPT checkboxes */}
+                            {msg.sender === "bot" && msg.action === "INDIVIDUAL_SELECT_PROMPT" && (
                                 <div class="action-buttons-panel">
                                     <div class="chip-actions-group">
-                                        <button class="btn-action-secondary" onClick={() => handleSend('Price is slightly too high')}>
-                                            Price is too high
+                                        {msg.data?.products?.map((item, itemIdx) => {
+                                            const itemNo = itemIdx + 1;
+                                            const isSelected = selectedItemIndices.includes(itemNo);
+                                            return (
+                                                <button
+                                                    key={itemIdx}
+                                                    class={`btn-item-chip ${isSelected ? 'active' : ''}`}
+                                                    style={{ background: isSelected ? 'var(--primary)' : 'rgba(2, 132, 199, 0.15)', color: '#FFF' }}
+                                                    onClick={() => toggleItemSelection(itemIdx)}
+                                                >
+                                                    {isSelected ? '[✓]' : '[ ]'} {itemNo}. {item.name} — ₹{item.price}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    <button class="btn-action-primary" style={{ marginTop: '10px' }} onClick={handleAddSelectedItems}>
+                                        Add Selected Items
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* DECLINE_REASON_PROMPT buttons */}
+                            {msg.sender === "bot" && msg.action === "DECLINE_REASON_PROMPT" && (
+                                <div class="action-buttons-panel">
+                                    <div class="chip-actions-group">
+                                        <button class="btn-action-secondary" onClick={() => handleSend('1')}>
+                                            1. Too expensive
                                         </button>
-                                        <button class="btn-action-secondary" onClick={() => handleSend('Already own these accessories')}>
-                                            Already own these accessories
+                                        <button class="btn-action-secondary" onClick={() => handleSend('2')}>
+                                            2. Not relevant to me
                                         </button>
-                                        <button class="btn-action-secondary" onClick={() => handleSend('Only need main equipment today')}>
-                                            Only need main item
+                                        <button class="btn-action-secondary" onClick={() => handleSend('3')}>
+                                            3. I don't like the brand
+                                        </button>
+                                        <button class="btn-action-secondary" onClick={() => handleSend('4')}>
+                                            4. I don't need additional products
+                                        </button>
+                                        <button class="btn-action-secondary" onClick={() => handleSend('5')}>
+                                            5. Other
                                         </button>
                                     </div>
                                 </div>
                             )}
 
-                            {msg.sender === "bot" && msg.status === "discounted_deals" && (
+                            {/* LOW_COST_ALTERNATIVE buttons */}
+                            {msg.sender === "bot" && msg.action === "LOW_COST_ALTERNATIVE" && (
                                 <div class="action-buttons-panel">
-                                    <button class="btn-action-primary" onClick={() => handleSend('1')}>
-                                        Option 1: Checkout with Recommended Product
+                                    <button class="btn-action-primary" onClick={() => handleSend('Yes, add lower-cost item')}>
+                                        Add Lower-Cost Item
                                     </button>
-                                    <div class="chip-actions-group">
-                                        {msg.data?.recommended_products?.map((item, itemIdx) => (
-                                            <button key={itemIdx} class="btn-item-chip" onClick={() => handleSend(`${itemIdx + 1}`)}>
-                                                + Add Item #{itemIdx + 1} ({item.name})
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <button class="btn-action-secondary" onClick={() => handleSend('3')}>
-                                        Option 3: Checkout Main Item Only
+                                    <button class="btn-action-secondary" onClick={() => handleSend('No, proceed to checkout')}>
+                                        Proceed to Checkout Only
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* PAYMENT_CONFIRMATION_PROMPT button */}
+                            {msg.sender === "bot" && msg.action === "PAYMENT_CONFIRMATION_PROMPT" && (
+                                <div class="action-buttons-panel">
+                                    <button class="btn-action-primary" onClick={() => handleSend('Confirm and Pay')}>
+                                        Confirm & Proceed to Payment
                                     </button>
                                 </div>
                             )}
@@ -161,7 +254,7 @@ export default function ChatAgent({ conversationId, cart, setCart, setCurrentOrd
                     type="text"
                     value={inputMsg}
                     onChange={(e) => setInputMsg(e.target.value)}
-                    placeholder="Type a message or click an action button above..."
+                    placeholder="Type a message or click an action button..."
                     onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                 />
                 <button class="btn-send" onClick={() => handleSend()}>Send</button>

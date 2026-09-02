@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from typing import Optional
 
 from app.models.product import Product
 from app.models.merchant import Merchant
@@ -12,8 +13,44 @@ class RecommendedProduct(BaseModel):
     name: str
     category: str
     price: float
+    original_price: float
+    discount_percent: float
+    savings: float
     rating: float
+    attributes: Optional[str] = None
     reason: str
+
+
+def calculate_category_stats(db: Session, category: str) -> dict:
+    """
+    Deterministic Python calculation of category price statistics across all in-stock products.
+    """
+    products = db.query(Product).filter(
+        Product.category == category,
+        Product.stock > 0
+    ).all()
+
+    if not products:
+        return {
+            "total_in_stock": 0,
+            "min_price": 0.0,
+            "max_price": 0.0,
+            "avg_price": 0.0,
+            "products": []
+        }
+
+    prices = [p.price for p in products]
+    min_p = min(prices)
+    max_p = max(prices)
+    avg_p = sum(prices) / len(prices)
+
+    return {
+        "total_in_stock": len(products),
+        "min_price": round(min_p, 2),
+        "max_price": round(max_p, 2),
+        "avg_price": round(avg_p, 2),
+        "products": products
+    }
 
 
 def search_products(
@@ -37,83 +74,23 @@ def search_products(
     return query.all()
 
 
-def get_personalized_product_need(
-    product: Product,
-    sport: str | None = None,
-    experience: str | None = None
-) -> str:
-    """
-    Generate professional, non-generic explanations based on attributes, ratings, and sport.
-    """
-    attrs = (product.attributes or "").lower()
-    sp = (sport or "sports").capitalize()
-
-    if "pro" in attrs or "carbon" in attrs or "english_willow" in attrs or "pitta" in attrs:
-        return (
-            f"Engineered for high-level {sp} performance with professional-grade materials ({product.rating}★ rating) "
-            f"to maximize stroke control, speed, and durability."
-        )
-    elif "intermediate" in attrs or "balanced" in attrs or "fg" in attrs:
-        return (
-            f"A balanced choice for {sp} delivering solid responsiveness ({product.rating}★ rating), "
-            f"enhanced stability, and long-lasting performance for regular play."
-        )
-    else:
-        return (
-            f"An excellent value pick for starting out in {sp} ({product.rating}★ rating), "
-            f"offering reliable comfort, flexible handling, and solid build quality."
-        )
-
-
-def get_personalized_recommendation_reason(
-    product: Product,
-    sport: str | None = None
-) -> str:
-    """
-    Generate professional utility explanations for cross-sell add-ons.
-    """
-    cat = (product.category or "").lower()
-    sp = (sport or "sports").capitalize()
-
-    if "grip" in cat:
-        return (
-            f"Essential for racquet control in {sp}. Absorbs moisture, prevents handle slipping, "
-            f"and provides superior tactile grip during long sessions."
-        )
-    elif "shuttlecock" in cat:
-        return (
-            f"Tournament-tested shuttlecocks delivering consistent flight trajectory, accurate speed, "
-            f"and high durability for practice and matches."
-        )
-    elif "socks" in cat:
-        return (
-            f"Engineered with moisture-wicking fabric and targeted cushioning to protect against friction and blisters."
-        )
-    elif "shin_guards" in cat or "pads" in cat or "gloves" in cat:
-        return (
-            f"Impact-absorbing protective gear designed to cushion strikes and safeguard against injury."
-        )
-    elif "balls" in cat:
-        return (
-            f"High-density felt balls providing consistent bounce, spin response, and durability."
-        )
-    elif "goggles" in cat or "swimwear" in cat or "cap" in cat:
-        return (
-            f"Anti-fog, UV-protected gear providing clear underwater visibility and ergonomic chlorine resistance."
-        )
-    else:
-        return (
-            f"High-value complement rated {product.rating}★ to complete your performance setup."
-        )
-
-
 def format_product_dict(p: Product, merchant_map: dict, sport: str | None = None, experience: str | None = None) -> dict:
     m = merchant_map.get(p.merchant_id)
     m_name = m.name if m else f"Merchant #{p.merchant_id}"
     disc_pct = m.max_discount if (m and m.max_discount) else 15.0
     orig_price = round(p.price / (1.0 - (disc_pct / 100.0)), 2)
     savings = round(orig_price - p.price, 2)
-    need_stmt = get_personalized_product_need(p, sport=sport, experience=experience)
+    
+    sp = (sport or "sports").capitalize()
+    attrs = (p.attributes or "").lower()
+    exp = (experience or "beginner").lower()
+
+    if exp in ["experienced", "pro", "competitive"]:
+        reason = f"High-performance {sp} selection ({p.rating}★ rating) engineered with durable materials for competitive match play."
+    elif exp in ["intermediate", "regular"]:
+        reason = f"Balanced {sp} choice ({p.rating}★ rating) delivering solid responsiveness and stability for regular sessions."
+    else:
+        reason = f"Comfortable value choice ({p.rating}★ rating) providing reliable build quality for getting started in {sp}."
 
     return {
         "id": p.id,
@@ -127,175 +104,497 @@ def format_product_dict(p: Product, merchant_map: dict, sport: str | None = None
         "savings": savings,
         "rating": p.rating,
         "attributes": p.attributes,
-        "personalized_need": need_stmt
+        "reason": reason
     }
 
 
-def build_single_main_product(
-    db: Session,
-    main_category: str = "badminton_racket",
-    pointer: int = 0,
-    budget: float | None = None,
-    experience: str | None = None,
-    sport: str | None = None
-):
-    """
-    Loads ONE main product at a time matching budget & sport, presenting 2 choices:
-    Option 1: Checkout
-    Option 2: Show next product
-    """
-    merchant_map = {m.id: m for m in db.query(Merchant).all()}
-    candidates = search_products(db=db, category=main_category, max_price=budget)
+def get_personalized_recommendation_reason(
+    product: Product,
+    sport: str | None = None,
+    experience: str | None = None
+) -> str:
+    cat = (product.category or "").lower()
+    sp = (sport or "sports").capitalize()
 
-    if not candidates:
-        all_candidates = search_products(db=db, category=main_category)
-        if not all_candidates:
-            sp_display = (sport or "sports").capitalize()
+    if "grip" in cat:
+        return f"Essential for racquet handle control in {sp}. Absorbs sweat and prevents slipping during long sessions."
+    elif "shuttlecock" in cat:
+        return f"Tournament-tested shuttlecocks delivering consistent flight trajectory and durability."
+    elif "socks" in cat:
+        return f"Cushioned socks with moisture-wicking fabric; helps reduce friction and keeps feet comfortable on longer runs."
+    elif "shin_guards" in cat or "pads" in cat or "gloves" in cat:
+        return f"Impact-absorbing protective gear designed to cushion strikes and safeguard against injury."
+    elif "balls" in cat:
+        return f"High-density felt balls providing consistent bounce and spin durability."
+    elif "goggles" in cat or "swimwear" in cat or "cap" in cat:
+        return f"Anti-fog, UV-protected gear providing clear visibility and chlorine resistance."
+    elif "shirt" in cat or "jersey" in cat:
+        return f"Lightweight moisture-wicking fabric that regulates temperature and prevents chafing."
+    elif "shorts" in cat:
+        return f"Flexible ergonomic shorts designed for unrestricted motion and breathability."
+    else:
+        return f"Useful complement rated {product.rating}★ to complete your performance setup."
+
+
+def build_primary_recommendations(
+    db: Session,
+    intent,
+    preference: str | None = None
+) -> dict:
+    """
+    Deterministic calculation & selection of primary product options adhering strictly to 
+    experience levels, budget tiers (below min, avg<b<2xavg, b>=2xavg), and professional prioritization.
+    """
+    main_cat = intent.main_category or f"{intent.sport or 'running'}_shoes"
+    merchant_map = {m.id: m for m in db.query(Merchant).all()}
+    
+    stats = calculate_category_stats(db, main_cat)
+    if stats["total_in_stock"] == 0:
+        sp_display = (intent.sport or "sports").capitalize()
+        return {
+            "status": "no_products_found",
+            "message": f"Sorry, no products are currently available in stock for '{main_cat.replace('_', ' ')}' in {sp_display}.",
+            "options": []
+        }
+
+    all_in_stock = stats["products"]
+    avg_price = stats["avg_price"]
+    min_price = stats["min_price"]
+    budget_val = intent.budget if (intent.budget and intent.budget > 0) else 5000.0
+    exp_lower = (intent.experience or "beginner").lower()
+    is_pro = exp_lower in ["pro", "professional", "experienced", "competitive"]
+
+    # =========================================================
+    # SECTION 2: BUDGET BELOW THE CHEAPEST PRODUCT
+    # =========================================================
+    if budget_val < min_price:
+        budget_gap = round(min_price - budget_val, 2)
+        cheapest_p = min(all_in_stock, key=lambda p: p.price)
+        fmt_cheap = format_product_dict(cheapest_p, merchant_map, sport=intent.sport, experience=intent.experience)
+        fmt_cheap["option_num"] = 1
+        fmt_cheap["option_type"] = "entry_level"
+
+        sp_str = (intent.sport or "sports").capitalize()
+        lines = []
+
+        if not is_pro:
+            # Beginner / Intermediate below cheapest product
+            lines.append(f"You're ₹{int(budget_gap)} short of the most affordable {sp_str} option currently available.")
+            lines.append(
+                f"Stretching your budget slightly to ₹{int(min_price)} gives you a reliable entry-level choice "
+                f"with a {fmt_cheap['rating']}★ rating and the essentials needed for comfortable training:\n"
+            )
+            lines.append(f"• {fmt_cheap['name']} — ₹{int(fmt_cheap['price'])} ({fmt_cheap['rating']}★ from {fmt_cheap['merchant_name']})")
+            lines.append(f"• Budget Gap: ₹{int(budget_gap)}")
+            lines.append(f"• Reason: {fmt_cheap['reason']}\n")
+            lines.append("Please select an action:")
             return {
-                "status": "no_products_found",
-                "message": f"Sorry, no products available for '{main_category.replace('_', ' ')}' in {sp_display}.",
-                "product": None,
-                "total_candidates": 0
+                "status": "budget_stretch_required",
+                "message": "\n".join(lines),
+                "options": [fmt_cheap],
+                "price_difference": budget_gap,
+                "is_pro": False
             }
         else:
-            min_price = min(p.price for p in all_candidates)
+            # Professional below cheapest product -> Show cheapest AND highest-quality available
+            highest_quality_p = max(all_in_stock, key=lambda p: (p.rating, p.price))
+            fmt_high = format_product_dict(highest_quality_p, merchant_map, sport=intent.sport, experience=intent.experience)
+            fmt_high["option_num"] = 2
+            fmt_high["option_type"] = "pro_quality"
+
+            lines.append(f"Your target budget of ₹{int(budget_val)} is below available {sp_str} inventory.")
+            lines.append(f"For professional match play, here are the two relevant options available:\n")
+            
+            lines.append(f"Recommendation 1 (Accessible Entry) — {fmt_cheap['name']} — ₹{int(fmt_cheap['price'])} (from {fmt_cheap['merchant_name']})")
+            lines.append(f"• Rating: {fmt_cheap['rating']}★ | Budget Gap: ₹{int(budget_gap)}")
+            lines.append(f"• Features: Entry-level build for basic practice sessions.\n")
+
+            options = [fmt_cheap]
+            if fmt_high["id"] != fmt_cheap["id"]:
+                fmt_high_gap = round(fmt_high["price"] - budget_val, 2)
+                lines.append(f"Recommendation 2 (Pro Performance Tier) — {fmt_high['name']} — ₹{int(fmt_high['price'])}** (from {fmt_high['merchant_name']})")
+                lines.append(f"• Rating: {fmt_high['rating']}★ | Attributes: {fmt_high['attributes'] or 'Pro Specifications'}")
+                lines.append(f"• Pro Reasoning: As a competitive athlete, stretching to this tier gives you high-response cushioning, premium durability, and carbon/stability support required for match play.\n")
+                options.append(fmt_high)
+
+            lines.append("Please select an action:")
+            lines.append("Checkout Recommendation 1")
+            if len(options) > 1:
+                lines.append("Checkout Recommendation 2")
+
             return {
-                "status": "budget_exceeded",
-                "message": f"Requested budget of ₹{int(budget) if budget else 0} is below the catalog minimum of ₹{int(min_price)}.",
-                "product": None,
-                "total_candidates": 0
+                "status": "budget_stretch_required",
+                "message": "\n".join(lines),
+                "options": options,
+                "price_difference": budget_gap,
+                "is_pro": True
             }
 
-    # Sort candidates by rating and highest price within user budget first (top budget fit first)
-    candidates.sort(key=lambda p: (-p.rating, -p.price))
+    # Filter candidate products within user budget
+    candidates = [p for p in all_in_stock if p.price <= budget_val]
+    if not candidates:
+        candidates = [min(all_in_stock, key=lambda p: p.price)]
 
-    current_idx = pointer % len(candidates)
-    selected = candidates[current_idx]
-    fmt = format_product_dict(selected, merchant_map, sport=sport, experience=experience)
+    # Preference-Aware Re-ranking if user provided explicit preference
+    pref = (preference or intent.preference or "").lower()
+    if pref == "rating":
+        candidates.sort(key=lambda p: (-p.rating, -p.price))
+    elif pref == "comfort":
+        candidates.sort(key=lambda p: (0 if "comfort" in (p.attributes or "").lower() or "cushion" in (p.attributes or "").lower() else 1, -p.rating, -p.price))
+    elif pref == "performance":
+        candidates.sort(key=lambda p: (0 if "pro" in (p.attributes or "").lower() or "carbon" in (p.attributes or "").lower() or "willow" in (p.attributes or "").lower() else 1, -p.rating, -p.price))
+    elif pref in ["price", "value", "cheapest"]:
+        candidates.sort(key=lambda p: (p.price, -p.rating))
+    elif pref == "durability":
+        candidates.sort(key=lambda p: (0 if "durable" in (p.attributes or "").lower() or "fg" in (p.attributes or "").lower() else 1, -p.rating, -p.price))
 
-    sp_str = (sport or "sports").capitalize()
+    # =========================================================
+    # SECTION 6: PROFESSIONAL USER RECOMMENDATIONS
+    # =========================================================
+    if is_pro:
+        # Prioritize quality, rating, performance, durability over cheapness
+        if not pref:
+            candidates.sort(key=lambda p: (-p.rating, -p.price))
+        
+        opt1_p = candidates[0]
+        candidates_opt2 = [p for p in candidates if p.id != opt1_p.id]
+        opt2_p = candidates_opt2[0] if candidates_opt2 else opt1_p
+
+        fmt1 = format_product_dict(opt1_p, merchant_map, sport=intent.sport, experience=intent.experience)
+        fmt1["option_num"] = 1
+        fmt1["option_type"] = "pro_top_choice"
+
+        fmt2 = format_product_dict(opt2_p, merchant_map, sport=intent.sport, experience=intent.experience)
+        fmt2["option_num"] = 2
+        fmt2["option_type"] = "pro_alternative"
+
+        options_list = [fmt1]
+        if fmt2["id"] != fmt1["id"]:
+            options_list.append(fmt2)
+
+        sp_str = (intent.sport or "sports").capitalize()
+        lines = []
+        lines.append(f"Top {sp_str} Performance Recommendations for Professional/Competitive Play (Budget: ₹{int(budget_val)}):\n")
+
+        lines.append(f"Recommendation 1 — {fmt1['name']} — ₹{int(fmt1['price'])} (from {fmt1['merchant_name']})")
+        lines.append(f"• Rating: {fmt1['rating']}★ | Attributes: {fmt1['attributes'] or 'Pro Grade'}")
+        lines.append(f"• Pro Reasoning: Top-tier match choice engineered for energy return, high durability, and competitive stability.\n")
+
+        if len(options_list) > 1:
+            lines.append(f"Recommendation 2 — {fmt2['name']} — ₹{int(fmt2['price'])} (from {fmt2['merchant_name']})")
+            lines.append(f"• Rating: {fmt2['rating']}★ | Attributes: {fmt2['attributes'] or 'High Quality'}")
+            lines.append(f"• Pro Reasoning: Excellent high-performance alternative offering solid support and tournament-ready build quality.\n")
+
+        lines.append("Please select an action:")
+
+        return {
+            "status": "primary_options",
+            "message": "\n".join(lines),
+            "options": options_list,
+            "avg_price": avg_price,
+            "min_price": min_price,
+            "max_price": stats["max_price"]
+        }
+
+    # =========================================================
+    # SECTION 5: BEGINNER / INTERMEDIATE — BUDGET >= 2x AVERAGE
+    # =========================================================
+    if budget_val >= (2.0 * avg_price):
+        # Calculate complementary gear sub_product_total for this sport
+        comp_res = _preview_complementary_total(db, intent, is_pro=False)
+        sub_product_total = comp_res["sub_product_total"]
+        target_main_price = max(min_price, budget_val - sub_product_total)
+
+        # Recommendation 1: Balanced Overall Deal (Main Product + Gear)
+        opt1_p = min(candidates, key=lambda p: (abs(p.price - target_main_price), -p.rating))
+
+        # Recommendation 2: Maximum Main Product (Highest priced <= budget)
+        candidates_opt2 = [p for p in candidates if p.id != opt1_p.id]
+        if candidates_opt2:
+            opt2_p = max(candidates_opt2, key=lambda p: (p.price, p.rating))
+        else:
+            opt2_p = opt1_p
+
+        fmt1 = format_product_dict(opt1_p, merchant_map, sport=intent.sport, experience=intent.experience)
+        fmt1["option_num"] = 1
+        fmt1["option_type"] = "balanced_deal"
+
+        fmt2 = format_product_dict(opt2_p, merchant_map, sport=intent.sport, experience=intent.experience)
+        fmt2["option_num"] = 2
+        fmt2["option_type"] = "max_main_product"
+
+        options_list = [fmt1]
+        if fmt2["id"] != fmt1["id"]:
+            options_list.append(fmt2)
+
+        sp_str = (intent.sport or "sports").capitalize()
+        lines = []
+        lines.append(f"Top {sp_str} Recommendations (Budget: ₹{int(budget_val)}):\n")
+        lines.append(f"Recommendation 2 — Maximum Main Product — {fmt2['name']} — ₹{int(fmt2['price'])} (from {fmt2['merchant_name']})")
+        lines.append(f"• Rating: {fmt2['rating']}★ \n Attributes: {fmt2['attributes'] or 'Premium Specifications'}")
+        lines.append(f"• Max Main Reasoning: The highest-tier primary product available within your ₹{int(budget_val)} budget if you prefer to maximize single-item quality.\n")
+        
+       
+        if len(options_list) > 1:
+            lines.append(f"Recommendation 1 — Balanced Overall Deal — {fmt1['name']} — ₹{int(fmt1['price'])} (from {fmt1['merchant_name']})")
+            lines.append(f"• Rating: {fmt1['rating']}★ | Attributes: {fmt1['attributes'] or 'Balanced Performance'}")
+            lines.append(f"• Balanced Reasoning: Rather than putting the entire ₹{int(budget_val)} into just the main product, this option gives you a strong primary setup while leaving room for useful training gear (approx ₹{int(sub_product_total)}) you'll actually use alongside it.\n")
+            
+            
+        lines.append("Please select an action:")
+    
+
+        return {
+            "status": "primary_options",
+            "message": "\n".join(lines),
+            "options": options_list,
+            "avg_price": avg_price,
+            "min_price": min_price,
+            "max_price": stats["max_price"]
+        }
+
+    # =========================================================
+    # SECTION 4: BEGINNER / INTERMEDIATE — BUDGET BETWEEN AVG AND 2x AVG (OR BELOW AVG)
+    # =========================================================
+    if budget_val > avg_price:
+        # Upper value range: 1.25 - 1.5 x avg_price
+        target_val = min(budget_val, avg_price * 1.35)
+        opt1_candidates = [p for p in candidates if p.price <= (avg_price * 1.5)]
+        if opt1_candidates:
+            opt1_p = min(opt1_candidates, key=lambda p: abs(p.price - target_val))
+        else:
+            opt1_p = min(candidates, key=lambda p: p.price)
+    else:
+        opt1_p = min(candidates, key=lambda p: (abs(p.price - budget_val), -p.rating))
+
+    candidates_opt2 = [p for p in candidates if p.id != opt1_p.id]
+    if candidates_opt2:
+        opt2_p = max(candidates_opt2, key=lambda p: (p.rating, p.price))
+    else:
+        opt2_p = opt1_p
+
+    fmt1 = format_product_dict(opt2_p, merchant_map, sport=intent.sport, experience=intent.experience)
+    fmt1["option_num"] = 1
+    fmt1["option_type"] = "value_recommendation"
+
+    fmt2 = format_product_dict(opt1_p, merchant_map, sport=intent.sport, experience=intent.experience)
+    fmt2["option_num"] = 2
+    fmt2["option_type"] = "best_within_budget"
+
+    options_list = [fmt1]
+    if fmt2["id"] != fmt1["id"]:
+        options_list.append(fmt2)
+
+
+
+    sp_str = (intent.sport or "sports").capitalize()
     lines = []
-    lines.append(f"Top {sp_str} Recommendation (Option {current_idx + 1} of {len(candidates)}):\n")
-    lines.append(f"• **{fmt['name']}** — **₹{int(fmt['price'])}** ({fmt['rating']}★ from {fmt['merchant_name']})")
-    lines.append(f"• Why it fits your purpose: {fmt['personalized_need']}")
-    lines.append(f"• Exclusive Deal: List Price ₹{fmt['original_price']} | Special Discount: {fmt['discount_percent']}% OFF | You Save: ₹{fmt['savings']}!\n")
+    lines.append(f"Top {sp_str} Primary Product Recommendations (Budget: ₹{int(budget_val)}):\n")
+
+    lines.append(f"Best-Value Recommendation — {fmt1['name']} — ₹{int(fmt1['price'])} (from {fmt1['merchant_name']})")
+    lines.append(f"• Rating: {fmt1['rating']}★ \n  key featuures of the product: {fmt1['attributes'] or 'Comfort & Value'}")
+    lines.append(f"• this product : Provides strong value and reliable quality without unnecessarily consuming your entire ₹{int(budget_val)} budget, leaving room for useful sports gear.\n\n\n")
+
+    if len(options_list) > 1:
+        lines.append(f"Best Product Within Budget — {fmt2['name']} — ₹{int(fmt2['price'])} (from {fmt2['merchant_name']})")
+        lines.append(f"• Rating: {fmt2['rating']}★ \n Attributes: {fmt2['attributes'] or 'High Quality'}")
+        lines.append(f"• The highest-quality suitable product available within your ₹{int(budget_val)} budget.\n")
+
+    lines.append("Please select an action:")
+  
+
 
     return {
-        "status": "main_product",
+        "status": "primary_options",
         "message": "\n".join(lines),
-        "product": fmt,
-        "total_candidates": len(candidates),
-        "current_pointer": current_idx,
-        "has_next": len(candidates) > 1
+        "options": options_list,
+        "avg_price": avg_price,
+        "min_price": min_price,
+        "max_price": stats["max_price"]
     }
 
 
-def build_crazy_deals_recommendations(
+def _preview_complementary_total(db: Session, intent, is_pro: bool = False) -> dict:
+    """
+    Helper to calculate sub_product_total for sports gear without adding to cart.
+    """
+    related_cats = intent.related_categories or []
+    sub_total = 0.0
+    items_count = 0
+
+    for cat in related_cats:
+        items = search_products(db=db, category=cat)
+        if items:
+            if is_pro:
+                items.sort(key=lambda p: (-p.rating, -p.price))
+            else:
+                items.sort(key=lambda p: (p.price, -p.rating))
+            sub_total += items[0].price
+            items_count += 1
+
+    return {"sub_product_total": round(sub_total, 2), "items_count": items_count}
+
+
+def build_complementary_recommendations(
     db: Session,
-    chosen_main: dict,
-    related_categories: list[str],
-    budget: float | None = None,
-    experience: str | None = None,
-    sport: str | None = None
-):
+    selected_main: dict,
+    intent,
+    remaining_budget: float,
+    selected_path: str = "option1"
+) -> dict:
+    """
+    Identifies dynamic cross-merchant add-on recommendations matching sport & remaining budget.
+    Sections 9, 10, 11:
+    - Beginner/Intermediate: Affordable, useful, good quality (prefer lower-cost suitable products).
+    - Professional: High rating, premium quality, performance, durability (higher quality even if cost more).
+    """
     merchant_map = {m.id: m for m in db.query(Merchant).all()}
-    chosen_price = chosen_main.get("price", 0.0)
-    remaining_budget = (budget - chosen_price) if (budget and budget > chosen_price) else None
+    related_cats = intent.related_categories or []
+    exp_lower = (intent.experience or "beginner").lower()
+    is_pro = exp_lower in ["pro", "professional", "experienced", "competitive"]
 
     formatted_recs = []
-    for cat in related_categories:
-        items = search_products(db=db, category=cat, max_price=remaining_budget)
-        if not items:
-            items = search_products(db=db, category=cat)
-        if not items:
-            continue
+    seen_ids = {selected_main.get("id")}
 
-        items.sort(key=lambda p: (-p.rating, p.price))
-        p = items[0]
-        fmt = format_product_dict(p, merchant_map, sport=sport, experience=experience)
-        fmt["personalized_reason"] = get_personalized_recommendation_reason(p, sport=sport)
-        formatted_recs.append(fmt)
-
-    formatted_recs.sort(key=lambda x: x["price"])
-
-    sp_str = (sport or "sports").capitalize()
-    lines = []
-    lines.append(f"**Exclusive Add-on Recommendations for Your Order**\n")
-    lines.append(f"You selected **{chosen_main['name']}** (₹{int(chosen_main['price'])}). To maximize your {sp_str} performance, we have unlocked these complementary add-on deals:\n")
-
-    for idx, item in enumerate(formatted_recs, start=1):
-        lines.append(f"{idx}. **{item['name']}** — **₹{int(item['price'])}** (from {item['merchant_name']})")
-        lines.append(f"   • Performance Benefit: {item['personalized_reason']}")
-        lines.append(f"   • Deal Terms: List Price ₹{item['original_price']} | {item['discount_percent']}% OFF | You Save ₹{item['savings']}!\n")
-
-    return {
-        "status": "crazy_deals",
-        "message": "\n".join(lines),
-        "selected_main": chosen_main,
-        "recommended_products": formatted_recs
-    }
-
-
-def build_lower_priced_deals_recommendations(
-    db: Session,
-    chosen_main: dict,
-    related_categories: list[str],
-    budget: float | None = None,
-    experience: str | None = None,
-    sport: str | None = None
-):
-    merchant_map = {m.id: m for m in db.query(Merchant).all()}
-    formatted_lower = []
-
-    for cat in related_categories:
+    for cat in related_cats:
         items = search_products(db=db, category=cat)
         if not items:
             continue
 
-        items.sort(key=lambda p: p.price)
-        p = items[0]
-        fmt = format_product_dict(p, merchant_map, sport=sport, experience=experience)
-        fmt["personalized_reason"] = get_personalized_recommendation_reason(p, sport=sport)
-        formatted_lower.append(fmt)
+        if is_pro:
+            # Section 11: Professionals -> prioritize rating, quality, performance, durability
+            items.sort(key=lambda p: (-p.rating, -p.price))
+        else:
+            # Section 10: Beginner/Intermediate -> affordable + useful + acceptable quality
+            items.sort(key=lambda p: (p.price, -p.rating))
 
-    formatted_lower.sort(key=lambda x: x["price"])
+        for p in items:
+            if p.id not in seen_ids:
+                seen_ids.add(p.id)
+                fmt = format_product_dict(p, merchant_map, sport=intent.sport, experience=intent.experience)
+                fmt["personalized_reason"] = get_personalized_recommendation_reason(p, sport=intent.sport, experience=intent.experience)
+                formatted_recs.append(fmt)
+                break
 
-    sp_str = (sport or "sports").capitalize()
-    main_val = int(chosen_main.get("price", 0))
+    formatted_recs.sort(key=lambda x: x["price"])
 
+    indiv_total = round(sum(i["price"] for i in formatted_recs), 2)
+    orig_indiv_total = round(sum(i["original_price"] for i in formatted_recs), 2)
+    bundle_savings = round(orig_indiv_total - indiv_total, 2)
+    bundle_total = indiv_total
+
+    sp_str = (intent.sport or "sports").capitalize()
     lines = []
-    lines.append("**Special Value Add-on Offer**\n")
-    lines.append(
-        f"Since you are completing your order for **{chosen_main['name']}** (₹{main_val}), "
-        f"we have unlocked an exclusive, lower-priced add-on offer for this session:\n"
-    )
+    lines.append(f"Recommended Cross-Merchant product specially for you !\n")
+    lines.append(f"{selected_main['name']} — ₹{int(selected_main['price'])} (from {selected_main.get('merchant_name', 'Merchant')})\n")
 
-    for idx, item in enumerate(formatted_lower, start=1):
-        lines.append(f"{idx}. **{item['name']}** — **₹{int(item['price'])}** (from {item['merchant_name']})")
-        lines.append(f"   • Essential Benefit: {item['personalized_reason']}")
-        lines.append(f"   • Special Deal: List Price ₹{item['original_price']} | Saved ₹{item['savings']}!\n")
+    for idx, item in enumerate(formatted_recs, start=1):
+        lines.append(f"• {item['name']} — ₹{int(item['price'])} — ★{item['rating']} (from {item['merchant_name']})")
+        lines.append(f"  {item['personalized_reason']}\n")
+
+    if bundle_savings > 0:
+        lines.append(f"Bundle Savings: You save ₹{int(bundle_savings)} off standard list prices across items!\n")
+
+    lines.append("Please select how you would like to proceed:")
+    lines.append("• Add all recommended products")
+    lines.append("• Select individually")
+    lines.append("• End shopping (No complementary products)")
 
     return {
-        "status": "discounted_deals",
+        "status": "cross_sell",
         "message": "\n".join(lines),
-        "selected_main": chosen_main,
-        "recommended_products": formatted_lower
+        "products": formatted_recs,
+        "individual_total": indiv_total,
+        "bundle_total": bundle_total,
+        "bundle_savings": bundle_savings
     }
 
 
-def build_checkout_bill(cart: list[dict]):
+def build_lowest_cost_cross_sell(
+    db: Session,
+    selected_main: dict,
+    intent
+) -> dict:
+    """
+    Section 14: Finds the least expensive suitable complementary product for 'Too expensive' decline path.
+    Single final attempt.
+    """
+    merchant_map = {m.id: m for m in db.query(Merchant).all()}
+    related_cats = intent.related_categories or []
+
+    lowest_product = None
+    for cat in related_cats:
+        items = search_products(db=db, category=cat)
+        if items:
+            items.sort(key=lambda p: p.price)
+            if lowest_product is None or items[0].price < lowest_product.price:
+                lowest_product = items[0]
+
+    if not lowest_product:
+        return {
+            "status": "no_lower_cost_found",
+            "message": "No lower-cost alternative is available.",
+            "product": None
+        }
+
+    fmt = format_product_dict(lowest_product, merchant_map, sport=intent.sport, experience=intent.experience)
+    fmt["personalized_reason"] = get_personalized_recommendation_reason(lowest_product, sport=intent.sport, experience=intent.experience)
+
+    lines = []
+    lines.append("Since you've already chosen the primary product, here's a lower-cost way to add one useful essential without significantly increasing your total:\n")
+    lines.append(f"{fmt['name']} — ₹{int(fmt['price'])} — \n ★{fmt['rating']} (from {fmt['merchant_name']})")
+    lines.append(f"{fmt['personalized_reason']}\n")
+    lines.append("Would you like to add this item to your order or proceed to checkout?")
+
+    return {
+        "status": "low_cost_alternative",
+        "message": "\n".join(lines),
+        "product": fmt
+    }
+
+
+def find_brand_alternatives(
+    db: Session,
+    main_category: str,
+    excluded_merchant_id: int
+) -> list[dict]:
+    """
+    Section 16: Searches DB for alternative merchant brands offering equivalent category products.
+    """
+    merchant_map = {m.id: m for m in db.query(Merchant).all()}
+    alt_products = db.query(Product).filter(
+        Product.category == main_category,
+        Product.merchant_id != excluded_merchant_id,
+        Product.stock > 0
+    ).all()
+
+    formatted_alts = []
+    for p in alt_products:
+        fmt = format_product_dict(p, merchant_map)
+        formatted_alts.append(fmt)
+
+    return formatted_alts
+
+
+def build_checkout_bill(cart: list[dict], budget: float | None = None):
+    """
+    Section 17: Provides a concise purchase summary containing main product, complementary products,
+    merchants, subtotal, applicable discount, actual savings, and final total.
+    """
     if not cart:
         return {
             "status": "complete",
             "message": "Your cart is currently empty.",
-            "total": 0.0,
+            "subtotal": 0.0,
             "total_savings": 0.0,
+            "final_total": 0.0,
             "checkout_gated": False
         }
 
     total_price = round(sum(item["price"] for item in cart), 2)
     total_orig_price = round(sum(item.get("original_price", item["price"]) for item in cart), 2)
     total_savings = round(total_orig_price - total_price, 2)
+    remaining_b = round(budget - total_price, 2) if (budget and budget >= total_price) else 0.0
 
     lines = []
     lines.append("========================================")
@@ -306,13 +605,16 @@ def build_checkout_bill(cart: list[dict]):
     for idx, item in enumerate(cart, start=1):
         m_info = f" from {item.get('merchant_name')}" if item.get('merchant_name') else ""
         lines.append(
-            f"{idx}. {item['name']}{m_info} - ₹{int(item['price'])} "
-            f"(List Price: ₹{item.get('original_price', item['price'])} | Saved: ₹{item.get('savings', 0.0)})"
+            f"{idx}. {item['name']}{m_info} — ₹{int(item['price'])} "
+            f"(List Price: ₹{item.get('original_price', item['price'])})"
         )
 
     lines.append("\n----------------------------------------")
     lines.append(f"Subtotal (List Price Total): ₹{total_orig_price}")
-    lines.append(f"Your Total Savings: ₹{total_savings}")
+    if total_savings > 0:
+        lines.append(f"Actual Discount Savings: ₹{total_savings}")
+    if remaining_b > 0:
+        lines.append(f"Remaining Budget: ₹{remaining_b}")
     lines.append(f"Final Amount Payable: ₹{int(total_price)}")
     lines.append("----------------------------------------\n")
     lines.append("Order Confirmed! Ready for Razorpay Test Payment.")
@@ -321,7 +623,10 @@ def build_checkout_bill(cart: list[dict]):
         "status": "complete",
         "message": "\n".join(lines),
         "cart": cart,
-        "total": total_price,
+        "subtotal": total_orig_price,
         "total_savings": total_savings,
+        "final_total": total_price,
+        "remaining_budget": remaining_b,
         "checkout_gated": False
     }
+

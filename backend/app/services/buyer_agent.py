@@ -9,37 +9,37 @@ from pydantic import BaseModel, Field
 
 class ShoppingIntent(BaseModel):
     goal: str = Field(
-        description="What the user is trying to accomplish"
+        description="Summary of what the user is trying to accomplish"
     )
 
     sport: str | None = Field(
         default=None,
-        description="Sport or activity explicitly or implicitly mentioned (e.g. 'badminton', 'football', 'cricket', 'tennis', 'swimming', 'running', 'gym', 'hiking', etc.)"
+        description="Sport or activity mentioned (e.g. 'running', 'badminton', 'football', 'cricket', 'tennis', 'swimming', 'cycling', 'gym')"
     )
 
     main_category: str | None = Field(
         default=None,
-        description="Primary product category requested (e.g. 'badminton_racket', 'football_boots', 'cricket_bat', 'tennis_racket', 'swimming_goggles', 'running_shoes')"
+        description="Primary product category requested (e.g. 'running_shoes', 'badminton_racket', 'football_boots', 'cricket_bat', 'tennis_racket', 'swimming_goggles')"
     )
 
     related_categories: list[str] = Field(
         default_factory=list,
-        description="Complementary product categories for cross-selling (e.g. ['badminton_grip', 'shuttlecock', 'badminton_shoes'] for badminton)"
+        description="Complementary product categories for cross-selling"
     )
 
     experience: str | None = Field(
         default=None,
-        description="User's explicit experience level: 'beginner', 'intermediate', 'experienced', or 'pro'. Set to null if not explicitly mentioned!"
+        description="User's experience level: 'beginner', 'intermediate', 'experienced', or 'pro'. Return NULL if not explicitly mentioned!"
     )
 
-    product_level: str | None = Field(
+    preference: str | None = Field(
         default=None,
-        description="Expected product level: 'basic', 'standard', 'premium', 'performance'. Set to null if not mentioned."
+        description="User's explicit preference if mentioned: 'rating', 'comfort', 'performance', 'price', 'durability'. Set to NULL if omitted."
     )
 
     budget: float | None = Field(
         default=None,
-        description="Maximum budget in INR (e.g. 3000.0). Set to null if not explicitly mentioned!"
+        description="Maximum budget float in INR. Set to NULL if not explicitly mentioned!"
     )
 
     categories: list[str] = Field(
@@ -49,7 +49,7 @@ class ShoppingIntent(BaseModel):
 
     missing_info: list[str] = Field(
         default_factory=list,
-        description="List of essential missing fields needed for a quality recommendation (e.g. ['experience'], ['budget'])"
+        description="List of essential missing fields (e.g. ['experience'])"
     )
 
 
@@ -60,7 +60,6 @@ client = genai.Client(
 )
 
 
-# Default Category Mappings for Popular Sports
 SPORT_CATEGORY_MAP = {
     "badminton": {
         "main": "badminton_racket",
@@ -89,12 +88,35 @@ SPORT_CATEGORY_MAP = {
 }
 
 
+def generate_sport_clarification_question(intent: ShoppingIntent) -> str:
+    """
+    Generates dynamic, sport-specific clarification questions.
+    """
+    sp = (intent.sport or "sports").lower()
+
+    if sp == "running":
+        return "To find the right fit, would you describe yourself as a beginner, intermediate, or experienced runner?"
+    elif sp == "badminton":
+        return "To select the right product, are you a beginner, regular player, or competitive player in badminton?"
+    elif sp == "cricket":
+        return "To recommend the right cricket bat/gear, are you a beginner, regular player, or competitive cricketer?"
+    elif sp == "football":
+        return "To select the right football boots, are you a beginner, regular player, or competitive footballer?"
+    elif sp == "swimming":
+        return "To recommend the best swim gear, are you a beginner swimmer, lap swimmer, or competitive athlete?"
+    elif sp == "tennis":
+        return "To recommend the right tennis racket, are you a beginner, regular player, or competitive tennis player?"
+    else:
+        sp_title = sp.capitalize()
+        return f"To recommend the right gear, are you a beginner, regular player, or competitive player i?"
+
+
 def _fallback_extract_intent(
     user_message: str,
     previous_intent: ShoppingIntent | None = None
 ) -> ShoppingIntent:
     """
-    Fallback deterministic parser for generic sports shopping.
+    Deterministic fallback parser for generic sports shopping.
     """
     msg_lower = user_message.lower()
 
@@ -103,7 +125,7 @@ def _fallback_extract_intent(
     main_category = previous_intent.main_category if previous_intent else None
     related_categories = list(previous_intent.related_categories) if previous_intent else []
     experience = previous_intent.experience if previous_intent else None
-    product_level = previous_intent.product_level if previous_intent else None
+    preference = previous_intent.preference if previous_intent else None
     budget = previous_intent.budget if previous_intent else None
 
     if any(k in msg_lower for k in ["badminton", "shuttle", "racket"]):
@@ -114,7 +136,7 @@ def _fallback_extract_intent(
         sport = "cricket"
     elif any(k in msg_lower for k in ["tennis"]):
         sport = "tennis"
-    elif any(k in msg_lower for k in ["swim", "swimming", "goggles", "swimwear", "jammers"]):
+    elif any(k in msg_lower for k in ["swim", "swimming", "goggles", "swimwear"]):
         sport = "swimming"
     elif any(k in msg_lower for k in ["running", "shoe", "shoes", "runner"]):
         sport = "running"
@@ -146,9 +168,10 @@ def _fallback_extract_intent(
         cfg = SPORT_CATEGORY_MAP.get(sport, {})
         related_categories = [c for c in cfg.get("cross_sells", []) if c != main_category]
 
-    budget_match = re.search(r'(?:under|below|max|budget|for|rs\.?|rupees|₹)\s*(\d+)', msg_lower)
+    clean_msg = msg_lower.replace(",", "")
+    budget_match = re.search(r'(?:under|below|max|budget|for|rs\.?|rupees|₹)\s*(\d+)', clean_msg)
     if not budget_match:
-        budget_match = re.search(r'(\d+)\s*(?:rupees|rs|inr|\b)', msg_lower)
+        budget_match = re.search(r'(\d+)\s*(?:rupees|rs|inr|\b)', clean_msg)
     if budget_match:
         try:
             val = float(budget_match.group(1))
@@ -157,15 +180,24 @@ def _fallback_extract_intent(
         except ValueError:
             pass
 
-    if any(k in msg_lower for k in ["pro", "experienced", "professional", "advanced", "competitive"]):
+
+    if any(k in msg_lower for k in ["pro", "experienced", "professional", "advanced", "competitive", "km", "compete"]):
         experience = "experienced"
-        product_level = "performance"
-    elif any(k in msg_lower for k in ["beginner", "starter", "starting", "novice", "new", "casual"]):
+    elif any(k in msg_lower for k in ["beginner", "starter", "starting", "novice", "new", "casual", "getting started", "i'm a beginner"]):
         experience = "beginner"
-        product_level = "basic"
     elif any(k in msg_lower for k in ["intermediate", "regular"]):
         experience = "intermediate"
-        product_level = "standard"
+
+    if "rating" in msg_lower:
+        preference = "rating"
+    elif "comfort" in msg_lower:
+        preference = "comfort"
+    elif "performance" in msg_lower:
+        preference = "performance"
+    elif "cheapest" in msg_lower or "price" in msg_lower or "value" in msg_lower:
+        preference = "price"
+    elif "durability" in msg_lower or "durable" in msg_lower:
+        preference = "durability"
 
     missing_info = []
     if experience is None:
@@ -184,7 +216,7 @@ def _fallback_extract_intent(
         main_category=main_category,
         related_categories=related_categories,
         experience=experience,
-        product_level=product_level,
+        preference=preference,
         budget=budget,
         categories=all_cats,
         missing_info=missing_info
@@ -206,8 +238,8 @@ Sport: {previous_intent.sport}
 Main Category: {previous_intent.main_category}
 Related Categories: {previous_intent.related_categories}
 Experience: {previous_intent.experience}
-Product level: {previous_intent.product_level}
 Budget: {previous_intent.budget}
+Preference: {previous_intent.preference}
 Categories: {previous_intent.categories}
 
 Use this context to update missing fields when user provides new information.
@@ -215,23 +247,22 @@ Use this context to update missing fields when user provides new information.
 
     prompt = f"""
 You are the General Sports Buyer Agent for AgentPay, an AI-native shopping platform.
-Your job is to understand what sports gear the user wants to buy across any sport (Badminton, Football, Cricket, Tennis, Swimming, Running, Gym, Hiking, etc.).
+Your job is to extract user shopping intent across any sport (Running, Badminton, Cricket, Football, Tennis, Swimming, Cycling, Gym, etc.).
 
 Extract:
 1. goal: Summary of user's shopping goal.
-2. sport: The sport or activity (e.g. 'badminton', 'football', 'cricket', 'tennis', 'swimming', 'running').
-3. main_category: Primary product category requested (e.g. 'badminton_racket', 'football_boots', 'cricket_bat', 'swimming_goggles', 'running_shoes').
-4. related_categories: List of 2-3 genuine complementary categories for cross-selling (e.g. ['badminton_grip', 'shuttlecock', 'badminton_shoes'] for badminton).
+2. sport: The sport or activity (e.g. 'running', 'badminton', 'cricket', 'football', 'tennis', 'swimming').
+3. main_category: Primary product category requested (e.g. 'running_shoes', 'badminton_racket', 'cricket_bat', 'football_boots').
+4. related_categories: List of 2-3 genuine complementary categories.
 5. experience: User's experience level if mentioned ('beginner', 'intermediate', 'experienced', 'pro'). Return NULL if not mentioned!
-6. product_level: Product level if mentioned ('basic', 'standard', 'premium', 'performance'). Return NULL if not mentioned!
-7. budget: Maximum budget float in INR if mentioned (e.g. 'under 3000' -> 3000.0). Return NULL if not mentioned!
+6. preference: User's preference if mentioned ('rating', 'comfort', 'performance', 'price', 'durability'). Return NULL if not mentioned!
+7. budget: Maximum budget float in INR if mentioned (e.g. 5000.0). Return NULL if not mentioned!
 8. categories: List containing main_category plus related_categories.
 9. missing_info: List containing missing essential fields (e.g. ['experience'] if experience is null).
 
 CRITICAL RULES:
-- Do NOT default to running! The user could be asking for badminton, football, cricket, tennis, swimming, etc.
-- Do NOT assume experience level. If user did not state whether they are beginner or experienced, set experience to NULL and add 'experience' to missing_info.
-- Do NOT fabricate budget if omitted.
+- Do NOT assume experience level. Return NULL and add 'experience' to missing_info if omitted.
+- Do NOT fabricate budget or prices.
 
 {previous_context}
 
@@ -240,22 +271,28 @@ User message:
 """
 
     try:
-        response = client.models.generate_content(
+        chat = client.chats.create(
             model="gemini-3.6-flash",
-            contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=ShoppingIntent,
             ),
         )
+        response = chat.send_message(prompt)
         parsed = ShoppingIntent.model_validate_json(response.text)
         if parsed.experience is None and "experience" not in parsed.missing_info:
             parsed.missing_info.append("experience")
+
+        if parsed.budget is None or parsed.sport is None or parsed.main_category is None:
+            fallback = _fallback_extract_intent(user_message, previous_intent)
+            if parsed.budget is None and fallback.budget is not None:
+                parsed.budget = fallback.budget
+            if parsed.sport is None and fallback.sport is not None:
+                parsed.sport = fallback.sport
+            if parsed.main_category is None and fallback.main_category is not None:
+                parsed.main_category = fallback.main_category
+
         return parsed
+
     except Exception as e:
         return _fallback_extract_intent(user_message, previous_intent)
-
-
-if __name__ == "__main__":
-    res = extract_shopping_intent("I need a badminton racket under 3000 rupees")
-    print(res)

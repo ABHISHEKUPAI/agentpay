@@ -42,10 +42,7 @@ export default function App() {
                     </button>
                 </nav>
 
-                <div class="header-badges">
-                    <span class="badge badge-success">Razorpay Test Mode</span>
-                    <span class="badge badge-info">Audit Trail Active</span>
-                </div>
+              
             </header>
 
             {/* Tab 1: Shopper AI Agent */}
