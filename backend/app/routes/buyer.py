@@ -186,6 +186,9 @@ def buyer_chat(
     if state.step == "ask_experience":
         state.step = "primary_options"
 
+    # =========================================================
+    # STATE MACHINE TRANSITIONS
+    # =========================================================
 
     # ---------------------------------------------------------
     # STEP: ask_preference ("Explore other products" branch)
@@ -251,8 +254,7 @@ def buyer_chat(
             pref_msg = (
                 "What would you like to prioritize for your recommendation?\n"
                 "• Rating (highest customer reviews)\n"
-                "• Price ( better deal and affordability)\n"
-                
+                "• Price (better deal and affordability)\n"
             )
             return {
                 "action": "ASK_PREFERENCE",
@@ -262,8 +264,7 @@ def buyer_chat(
                 "checkout_gated": True
             }
 
-
-        # User chooses Option 2 (Best product within budget)
+        # User chooses Option 2 (Best product within budget / Max Product)
         if ("2" in msg_lower or "option 2" in msg_lower) and len(opts) > 1:
             chosen = opts[1]
             state.selected_primary = chosen
@@ -274,10 +275,9 @@ def buyer_chat(
 
             rem_budget = round(state.budget - chosen["price"], 2)
             conf_msg = (
-                f"A strong choice for you. At ₹{int(chosen['price'])}, you're saving "
+                f"A strong choice for you. At ₹{int(chosen['price'])}, you're keeping "
                 f"₹{int(rem_budget)} in remaining budget which could be used to buy supporting gear for mastering {intent.sport}"
             )
-
 
             state.step = "cross_sell"
             cross_res = build_complementary_recommendations(db, chosen, intent, rem_budget, selected_path="option2")
@@ -297,8 +297,8 @@ def buyer_chat(
                 "checkout_gated": True
             }
 
-        # User chooses Option 1 (Best-value recommendation) or confirms
-        if any(k in msg_lower for k in ["1", "option 1", "yes", "select", "value"]):
+        # User chooses Option 1 (Best-value recommendation / Balanced Deal) or confirms
+        if any(k in msg_lower for k in ["1", "option 1", "yes", "select", "value", "approve"]):
             chosen = opts[0] if opts else None
             if not chosen:
                 return {"status": "error", "message": "No products available."}
@@ -314,7 +314,6 @@ def buyer_chat(
                 f"A strong choice for your current needs. At ₹{int(chosen['price'])}, you're keeping "
                 f"₹{int(rem_budget)} in remaining budget available while getting the comfort and reliability that matter most at this stage."
             )
-
 
             state.step = "cross_sell"
             cross_res = build_complementary_recommendations(db, chosen, intent, rem_budget, selected_path="option1")
@@ -394,9 +393,9 @@ def buyer_chat(
                             state.cart.append(item)
                             added.append(item)
 
-                            
                 state.selected_cross_sells.extend(added)
                 state.log_audit_event("cross_sell_selected", {"type": "individual", "items": [i["name"] for i in added]})
+
                 state.step = "payment_confirmation"
                 bill_res = build_checkout_bill(state.cart, budget=state.budget)
                 return {
