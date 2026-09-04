@@ -217,9 +217,7 @@ def build_primary_recommendations(
                 options.append(fmt_high)
 
             lines.append("Please select an action:")
-            lines.append("Checkout Recommendation 1")
-            if len(options) > 1:
-                lines.append("Checkout Recommendation 2")
+        
 
             return {
                 "status": "budget_stretch_required",
