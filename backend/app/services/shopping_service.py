@@ -509,9 +509,7 @@ def build_complementary_recommendations(
         lines.append(f"Bundle Savings: You save ₹{int(bundle_savings)} off standard list prices across items!\n")
 
     lines.append("Please select how you would like to proceed:")
-    lines.append("• Add all recommended products")
-    lines.append("• Select individually")
-    lines.append("• End shopping (No complementary products)")
+
 
     return {
         "status": "cross_sell",

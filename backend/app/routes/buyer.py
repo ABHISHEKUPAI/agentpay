@@ -274,10 +274,13 @@ def buyer_chat(
             state.log_audit_event("primary_product_selected", {"option": 2, "product_id": chosen["id"], "name": chosen["name"]})
 
             rem_budget = round(state.budget - chosen["price"], 2)
-            conf_msg = (
-                f"A strong choice for you. At ₹{int(chosen['price'])}, you're keeping "
-                f"₹{int(rem_budget)} in remaining budget which could be used to buy supporting gear for mastering {intent.sport}"
-            )
+            if rem_budget >= 0:
+                conf_msg = (
+                    f"A strong choice for you. At ₹{int(chosen['price'])}, you're keeping "
+                    f"₹{int(rem_budget)} in remaining budget which could be used to buy supporting gear for mastering {intent.sport}"
+                )
+            else:
+                conf_msg = "A strong choice for your current needs for getting the comfort and reliability that matter most at this stage."
 
             state.step = "cross_sell"
             cross_res = build_complementary_recommendations(db, chosen, intent, rem_budget, selected_path="option2")
@@ -310,10 +313,13 @@ def buyer_chat(
             state.log_audit_event("primary_product_selected", {"option": 1, "product_id": chosen["id"], "name": chosen["name"]})
 
             rem_budget = round(state.budget - chosen["price"], 2)
-            conf_msg = (
-                f"A strong choice for your current needs. At ₹{int(chosen['price'])}, you're keeping "
-                f"₹{int(rem_budget)} in remaining budget available while getting the comfort and reliability that matter most at this stage."
-            )
+            if rem_budget >= 0:
+                conf_msg = (
+                    f"A strong choice for your current needs. At ₹{int(chosen['price'])}, you're keeping "
+                    f"₹{int(rem_budget)} in remaining budget available while getting the comfort and reliability that matter most at this stage."
+                )
+            else:
+                conf_msg = "A strong choice for your current needs for getting the comfort and reliability that matter most at this stage."
 
             state.step = "cross_sell"
             cross_res = build_complementary_recommendations(db, chosen, intent, rem_budget, selected_path="option1")
