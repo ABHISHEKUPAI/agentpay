@@ -207,3 +207,46 @@ def get_product(
         "rating": product.rating,
         "attributes": product.attributes
     }
+
+
+# =========================
+# MERCHANT ANALYTICS & STATS
+# =========================
+
+@router.get("/merchant-analytics")
+def get_merchant_analytics(
+    db: Session = Depends(get_db)
+):
+    merchants = db.query(Merchant).all()
+    products = db.query(Product).all()
+
+    breakdown = []
+    total_val = 0.0
+
+    for m in merchants:
+        m_products = [p for p in products if p.merchant_id == m.id]
+        m_stock = sum(p.stock for p in m_products)
+        m_value = sum(p.price * p.stock for p in m_products)
+        total_val += m_value
+
+        breakdown.append({
+            "id": m.id,
+            "name": m.name,
+            "category": m.category,
+            "min_margin": m.min_margin,
+            "max_discount": m.max_discount,
+            "product_count": len(m_products),
+            "total_stock": m_stock,
+            "catalog_value_inr": round(m_value, 2)
+        })
+
+    max_disc_cap = max([m.max_discount if m.max_discount <= 1.0 else m.max_discount / 100.0 for m in merchants], default=0.15) * 100
+    min_margin_cap = min([m.min_margin if m.min_margin <= 1.0 else m.min_margin / 100.0 for m in merchants], default=0.80) * 100
+
+    return {
+        "merchant_count": len(merchants),
+        "total_products": len(products),
+        "total_catalog_value_inr": round(total_val, 2),
+        "active_policy_caps": f"{int(max_disc_cap)}% Max Discount | Min Margin {int(min_margin_cap)}% Guaranteed",
+        "merchant_breakdown": breakdown
+    }

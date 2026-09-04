@@ -25,6 +25,114 @@ abandoned_sessions: dict[str, AbandonedCartSession] = {}
 recovered_history: list[dict] = []
 
 
+def seed_initial_sessions():
+    if not abandoned_sessions:
+        # Session 1: Abandoned Badminton setup
+        s1 = AbandonedCartSession(
+            session_id="sess_badminton_pro_991",
+            cart=[
+                {"id": 1, "name": "Yonex Arcsaber 11 Pro Racket", "price": 4899.0, "original_price": 5499.0},
+                {"id": 15, "name": "Yonex Aeroplane Feather Shuttlecocks", "price": 1299.0, "original_price": 1499.0}
+            ],
+            user_goal="badminton tournament setup"
+        )
+        s1.audit_history.append({
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "action": "ABANDONED_CART_DETECTED",
+            "session_id": s1.session_id,
+            "cart_items_count": 2,
+            "potential_revenue_inr": 6198.0,
+            "user_savings_left_behind_inr": 800.0,
+            "risk_level": "HIGH_ABANDONMENT"
+        })
+        abandoned_sessions[s1.session_id] = s1
+
+        # Session 2: Intervened Running Kit
+        s2 = AbandonedCartSession(
+            session_id="sess_running_kit_842",
+            cart=[
+                {"id": 25, "name": "Nike Air Zoom Pegasus 40", "price": 8499.0, "original_price": 9999.0},
+                {"id": 30, "name": "Nike Dri-FIT Running Socks (3-Pack)", "price": 899.0, "original_price": 1099.0}
+            ],
+            user_goal="marathon preparation kit"
+        )
+        s2.intervention_count = 1
+        s2.status = "intervened"
+        s2.flash_discount_percent = 5.0
+        s2.audit_history.extend([
+            {
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "action": "ABANDONED_CART_DETECTED",
+                "session_id": s2.session_id,
+                "cart_items_count": 2,
+                "potential_revenue_inr": 9398.0,
+                "user_savings_left_behind_inr": 1700.0,
+                "risk_level": "HIGH_ABANDONMENT"
+            },
+            {
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "action": "RECOVERY_INTERVENTION_SENT",
+                "session_id": s2.session_id,
+                "intervention_count": 1,
+                "stopping_rule_limit": 1,
+                "flash_discount_applied": 5.0,
+                "additional_discount_inr": 469.9,
+                "new_cart_total_inr": 8928.1,
+                "compliant_escalation": True
+            }
+        ])
+        abandoned_sessions[s2.session_id] = s2
+
+        # Session 3: Already Recovered Gym Gear
+        s3 = AbandonedCartSession(
+            session_id="sess_gym_starter_712",
+            cart=[
+                {"id": 40, "name": "Puma Speedcat Pro Training Shoes", "price": 4299.0, "original_price": 4999.0},
+                {"id": 42, "name": "Puma Sport Water Bottle 1L", "price": 599.0, "original_price": 799.0}
+            ],
+            user_goal="gym starter pack"
+        )
+        s3.intervention_count = 1
+        s3.status = "recovered"
+        s3.flash_discount_percent = 5.0
+        s3.recovered_amount = 4653.1
+        s3.audit_history.extend([
+            {
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "action": "ABANDONED_CART_DETECTED",
+                "session_id": s3.session_id,
+                "cart_items_count": 2,
+                "potential_revenue_inr": 4898.0,
+                "user_savings_left_behind_inr": 900.0,
+                "risk_level": "HIGH_ABANDONMENT"
+            },
+            {
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "action": "RECOVERY_INTERVENTION_SENT",
+                "session_id": s3.session_id,
+                "intervention_count": 1,
+                "stopping_rule_limit": 1,
+                "flash_discount_applied": 5.0,
+                "additional_discount_inr": 244.9,
+                "new_cart_total_inr": 4653.1,
+                "compliant_escalation": True
+            },
+            {
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "action": "RECOVERY_PAYMENT_COMPLETED",
+                "session_id": s3.session_id,
+                "recovered_amount_inr": 4653.1,
+                "status": "SUCCESS"
+            }
+        ])
+        abandoned_sessions[s3.session_id] = s3
+
+
+# Seed default sessions on load
+seed_initial_sessions()
+
+
+
 def register_abandoned_cart(session_id: str, cart: list[dict], user_goal: str = "running") -> AbandonedCartSession:
     """
     Detect and register an abandoned cart session.
