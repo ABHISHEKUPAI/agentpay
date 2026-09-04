@@ -7,23 +7,23 @@ AgentPay is an AI-powered commerce engine built on Razorpay APIs. It turns stati
 
 Suppose user wants a product say a running shoe. user tells the need to ai agent of AGENTPAY " i want a pair of running shoes" . AGENTPAY extracts users input and identifies the sports "running" then asks follo up questions "whats users budget" (5000,4000 etc) and how exerienced the user is (professional,Intermediate, beginner )" and then based on the information user has given AGENTPAY's primaryrecomendation system gets called which comprises of 5 search algorithm select primary product (running shoes) and secondary recomended list of products (socks, head-band,shorts etc) that are related to the sports (running in this example) and recomend it in such a way that the users need as well as purpose is satisfied and moreover makes user buy products near to or above the budget provided in the beginning of the session .
 
-* The base algorithm :- Every algorithm is based on this base algorithm 
-algorithms/Base_algorithm.png
+* **Base Algorithm:** Every decision tree algorithm builds on this foundational workflow:  
+[![Base Algorithm](algorithms/Base_algorithm.png)](algorithms/Base_algorithm.png)
 
-* ALGORITHM 1:- user is a Beginner with a budget less than least expensive product
-algorithms/ALGORITHM_1.png
+* **Algorithm 1:** Beginner / Intermediate user with a budget below the minimum product price  
+[![Algorithm 1](algorithms/ALGORITHM_1.png)](algorithms/ALGORITHM_1.png)
 
-* ALGORITHM 2:- user is a rofessional with budget less than least expensive product 
-algorithms/ALGORITHM_2.png
+* **Algorithm 2:** Professional user with a budget below the minimum product price  
+[![Algorithm 2](algorithms/ALGORITHM_2.png)](algorithms/ALGORITHM_2.png)
 
-* ALGORITHM 3:- user belongs to any experience level with budget between least expensive and average price of that perticular product in the entire database 
-algorithms/ALGORITHM_3.png
+* **Algorithm 3:** Any skill level with a budget between minimum and average market price  
+[![Algorithm 3](algorithms/ALGORITHM_3.png)](algorithms/ALGORITHM_3.png)
 
-* ALGORITHM 4:- user is beginner with bugdget above average price of that perticular product in entire database
-algorithms/ALGORITHM_4.png
+* **Algorithm 4:** Beginner / Intermediate user with a budget above average market price (includes sub-recommendations)  
+[![Algorithm 4](algorithms/ALGORITHM_4.png)](algorithms/ALGORITHM_4.png)
 
-* ALGORITHM 5:- user is a professional with budget above average price of that perticular product in the entire database 
-algorithms/ALGORITHM_5.png
+* **Algorithm 5:** Professional user with a budget above average market price (includes pro stretch & accessories)  
+[![Algorithm 5](algorithms/ALGORITHM_5.png)](algorithms/ALGORITHM_5.png)
 
 ---
 
