@@ -142,7 +142,12 @@ def build_primary_recommendations(
 ) -> dict:
     """
     Deterministic calculation & selection of primary product options adhering strictly to 
-    experience levels, budget tiers (below min, avg<b<2xavg, b>=2xavg), and professional prioritization.
+    experience levels, budget tiers (below min, min<b<avg, b>=avg), and professional prioritization.
+    - CASE 1: Beginner/Intermediate < min_price (UNTOUCHED)
+    - CASE 2: Pro < min_price (UNTOUCHED)
+    - CASE 3: Anyone with min_price <= budget < avg_price (UNTOUCHED)
+    - CASE 4: Beginner/Intermediate with budget >= avg_price
+    - CASE 5: Pro with budget >= avg_price
     """
     main_cat = intent.main_category or f"{intent.sport or 'running'}_shoes"
     merchant_map = {m.id: m for m in db.query(Merchant).all()}
@@ -159,12 +164,13 @@ def build_primary_recommendations(
     all_in_stock = stats["products"]
     avg_price = stats["avg_price"]
     min_price = stats["min_price"]
+    max_price = stats["max_price"]
     budget_val = intent.budget if (intent.budget and intent.budget > 0) else 5000.0
     exp_lower = (intent.experience or "beginner").lower()
     is_pro = exp_lower in ["pro", "professional", "experienced", "competitive"]
 
     # =========================================================
-    # SECTION 2: BUDGET BELOW THE CHEAPEST PRODUCT
+    # CASE 1 & CASE 2: BUDGET BELOW THE CHEAPEST PRODUCT (UNTOUCHED)
     # =========================================================
     if budget_val < min_price:
         budget_gap = round(min_price - budget_val, 2)
@@ -177,7 +183,7 @@ def build_primary_recommendations(
         lines = []
 
         if not is_pro:
-            # Beginner / Intermediate below cheapest product
+            # CASE 1: Beginner / Intermediate below cheapest product (UNTOUCHED)
             lines.append(f"You're ₹{int(budget_gap)} short of the most affordable {sp_str} option currently available.")
             lines.append(
                 f"Stretching your budget slightly to ₹{int(min_price)} gives you a reliable entry-level choice "
@@ -195,7 +201,7 @@ def build_primary_recommendations(
                 "is_pro": False
             }
         else:
-            # Professional below cheapest product -> Show cheapest AND highest-quality available
+            # CASE 2: Professional below cheapest product (UNTOUCHED)
             highest_quality_p = max(all_in_stock, key=lambda p: (p.rating, p.price))
             fmt_high = format_product_dict(highest_quality_p, merchant_map, sport=intent.sport, experience=intent.experience)
             fmt_high["option_num"] = 2
@@ -217,7 +223,6 @@ def build_primary_recommendations(
                 options.append(fmt_high)
 
             lines.append("Please select an action:")
-        
 
             return {
                 "status": "budget_stretch_required",
@@ -246,41 +251,88 @@ def build_primary_recommendations(
         candidates.sort(key=lambda p: (0 if "durable" in (p.attributes or "").lower() or "fg" in (p.attributes or "").lower() else 1, -p.rating, -p.price))
 
     # =========================================================
-    # SECTION 6: PROFESSIONAL USER RECOMMENDATIONS
+    # CASE 3: ANYONE WITH BUDGET BETWEEN MIN PRICE AND AVG PRICE (UNTOUCHED)
     # =========================================================
-    if is_pro:
-        # Prioritize quality, rating, performance, durability over cheapness
-        if not pref:
-            candidates.sort(key=lambda p: (-p.rating, -p.price))
-        
-        opt1_p = candidates[0]
+    if budget_val < avg_price:
+        opt1_p = min(candidates, key=lambda p: (abs(p.price - budget_val), -p.rating))
         candidates_opt2 = [p for p in candidates if p.id != opt1_p.id]
-        opt2_p = candidates_opt2[0] if candidates_opt2 else opt1_p
+        if candidates_opt2:
+            opt2_p = max(candidates_opt2, key=lambda p: (p.rating, p.price))
+        else:
+            opt2_p = opt1_p
 
-        fmt1 = format_product_dict(opt1_p, merchant_map, sport=intent.sport, experience=intent.experience)
+        fmt1 = format_product_dict(opt2_p, merchant_map, sport=intent.sport, experience=intent.experience)
         fmt1["option_num"] = 1
-        fmt1["option_type"] = "pro_top_choice"
+        fmt1["option_type"] = "value_recommendation"
 
-        fmt2 = format_product_dict(opt2_p, merchant_map, sport=intent.sport, experience=intent.experience)
+        fmt2 = format_product_dict(opt1_p, merchant_map, sport=intent.sport, experience=intent.experience)
         fmt2["option_num"] = 2
-        fmt2["option_type"] = "pro_alternative"
+        fmt2["option_type"] = "best_within_budget"
 
         options_list = [fmt1]
         if fmt2["id"] != fmt1["id"]:
             options_list.append(fmt2)
+
+        sp_str = (intent.sport or "sports").capitalize()
+        lines = []
+        lines.append(f"Top {sp_str} Primary Product Recommendations (Budget: ₹{int(budget_val)}):\n")
+
+        lines.append(f"Best-Value Recommendation — {fmt1['name']} — ₹{int(fmt1['price'])} (from {fmt1['merchant_name']})")
+        lines.append(f"• Rating: {fmt1['rating']}★ \n  key features of the product: {fmt1['attributes'] or 'Comfort & Value'}")
+        lines.append(f"• this product : Provides strong value and reliable quality without unnecessarily consuming your entire ₹{int(budget_val)} budget, leaving room for useful sports gear.\n\n\n")
+
+        if len(options_list) > 1:
+            lines.append(f"Best Product Within Budget — {fmt2['name']} — ₹{int(fmt2['price'])} (from {fmt2['merchant_name']})")
+            lines.append(f"• Rating: {fmt2['rating']}★ \n Attributes: {fmt2['attributes'] or 'High Quality'}")
+            lines.append(f"• The highest-quality suitable product available within your ₹{int(budget_val)} budget.\n")
+
+        lines.append("Please select an action:")
+
+        return {
+            "status": "primary_options",
+            "message": "\n".join(lines),
+            "options": options_list,
+            "avg_price": avg_price,
+            "min_price": min_price,
+            "max_price": max_price
+        }
+
+    # =========================================================
+    # CASE 5: PROFESSIONAL USER WITH BUDGET >= AVG PRICE
+    # =========================================================
+    if is_pro:
+        # Best product overall in category (highest rating/price across all in-stock)
+        best_overall_p = max(all_in_stock, key=lambda p: (p.rating, p.price))
+        # Best product within user budget
+        best_within_p = max(candidates, key=lambda p: (p.rating, p.price))
+
+        fmt_within = format_product_dict(best_within_p, merchant_map, sport=intent.sport, experience=intent.experience)
+        fmt_within["option_num"] = 2
+        fmt_within["option_type"] = "pro_within_budget"
+
+        options_list = [fmt_within]
+
+        fmt_overall = None
+        # Only show Recommendation 1 (Best Product Overall) if budget < max_price
+        if budget_val < max_price and best_overall_p.id != best_within_p.id:
+            fmt_overall = format_product_dict(best_overall_p, merchant_map, sport=intent.sport, experience=intent.experience)
+            fmt_overall["option_num"] = 1
+            fmt_overall["option_type"] = "pro_top_stretch"
+            options_list = [fmt_overall, fmt_within]
 
         sp_str = (intent.sport or "sports").capitalize()
         lines = []
         lines.append(f"Top {sp_str} Performance Recommendations for Professional/Competitive Play (Budget: ₹{int(budget_val)}):\n")
 
-        lines.append(f"Recommendation 1 — {fmt1['name']} — ₹{int(fmt1['price'])} (from {fmt1['merchant_name']})")
-        lines.append(f"• Rating: {fmt1['rating']}★ | Attributes: {fmt1['attributes'] or 'Pro Grade'}")
-        lines.append(f"• Pro Reasoning: Top-tier match choice engineered for energy return, high durability, and competitive stability.\n")
+        if fmt_overall:
+            stretch_gap = round(best_overall_p.price - budget_val, 2)
+            lines.append(f"Recommendation 1 (Top Pro Product Stretch) — {fmt_overall['name']} — ₹{int(fmt_overall['price'])} (from {fmt_overall['merchant_name']})")
+            lines.append(f"• Rating: {fmt_overall['rating']}★ | Attributes: {fmt_overall['attributes'] or 'Pro Specifications'}")
+            lines.append(f"• Stretch Prompt: This is the highest-rated overall pro product available. Can you stretch your budget by ₹{int(stretch_gap)} to get this top-tier match setup?\n")
 
-        if len(options_list) > 1:
-            lines.append(f"Recommendation 2 — {fmt2['name']} — ₹{int(fmt2['price'])} (from {fmt2['merchant_name']})")
-            lines.append(f"• Rating: {fmt2['rating']}★ | Attributes: {fmt2['attributes'] or 'High Quality'}")
-            lines.append(f"• Pro Reasoning: Excellent high-performance alternative offering solid support and tournament-ready build quality.\n")
+        lines.append(f"Recommendation 2 (Best Pro Product Within Budget) — {fmt_within['name']} — ₹{int(fmt_within['price'])} (from {fmt_within['merchant_name']})")
+        lines.append(f"• Rating: {fmt_within['rating']}★ | Attributes: {fmt_within['attributes'] or 'Pro Grade'}")
+        lines.append(f"• Pro Reasoning: The highest-rated pro product available within your ₹{int(budget_val)} budget for competitive play.\n")
 
         lines.append("Please select an action:")
 
@@ -290,92 +342,33 @@ def build_primary_recommendations(
             "options": options_list,
             "avg_price": avg_price,
             "min_price": min_price,
-            "max_price": stats["max_price"]
+            "max_price": max_price
         }
 
     # =========================================================
-    # SECTION 5: BEGINNER / INTERMEDIATE — BUDGET >= 2x AVERAGE
+    # CASE 4: BEGINNER / INTERMEDIATE WITH BUDGET >= AVG PRICE
     # =========================================================
-    if budget_val >= (2.0 * avg_price):
-        # Calculate complementary gear sub_product_total for this sport
-        comp_res = _preview_complementary_total(db, intent, is_pro=False)
-        sub_product_total = comp_res["sub_product_total"]
-        target_main_price = max(min_price, budget_val - sub_product_total)
+    # Recommendation 2: Best Ranked & Highest Priced Product Within Budget
+    opt2_p = max(candidates, key=lambda p: (p.price, p.rating))
 
-        # Recommendation 1: Balanced Overall Deal (Main Product + Gear)
-        opt1_p = min(candidates, key=lambda p: (abs(p.price - target_main_price), -p.rating))
+    # Recommendation 1: Best Value Product based on (budget_val - sub_product_total)
+    comp_res = _preview_complementary_total(db, intent, is_pro=False)
+    sub_product_total = comp_res["sub_product_total"]
+    target_main_price = max(min_price, budget_val - sub_product_total)
 
-        # Recommendation 2: Maximum Main Product (Highest priced <= budget)
-        candidates_opt2 = [p for p in candidates if p.id != opt1_p.id]
-        if candidates_opt2:
-            opt2_p = max(candidates_opt2, key=lambda p: (p.price, p.rating))
-        else:
-            opt2_p = opt1_p
-
-        fmt1 = format_product_dict(opt1_p, merchant_map, sport=intent.sport, experience=intent.experience)
-        fmt1["option_num"] = 1
-        fmt1["option_type"] = "balanced_deal"
-
-        fmt2 = format_product_dict(opt2_p, merchant_map, sport=intent.sport, experience=intent.experience)
-        fmt2["option_num"] = 2
-        fmt2["option_type"] = "max_main_product"
-
-        options_list = [fmt1]
-        if fmt2["id"] != fmt1["id"]:
-            options_list.append(fmt2)
-
-        sp_str = (intent.sport or "sports").capitalize()
-        lines = []
-        lines.append(f"Top {sp_str} Recommendations (Budget: ₹{int(budget_val)}):\n")
-        lines.append(f"Recommendation 2 — Maximum Main Product — {fmt2['name']} — ₹{int(fmt2['price'])} (from {fmt2['merchant_name']})")
-        lines.append(f"• Rating: {fmt2['rating']}★ \n Attributes: {fmt2['attributes'] or 'Premium Specifications'}")
-        lines.append(f"• Max Main Reasoning: The highest-tier primary product available within your ₹{int(budget_val)} budget if you prefer to maximize single-item quality.\n")
-        
-       
-        if len(options_list) > 1:
-            lines.append(f"Recommendation 1 — Balanced Overall Deal — {fmt1['name']} — ₹{int(fmt1['price'])} (from {fmt1['merchant_name']})")
-            lines.append(f"• Rating: {fmt1['rating']}★ | Attributes: {fmt1['attributes'] or 'Balanced Performance'}")
-            lines.append(f"• Balanced Reasoning: Rather than putting the entire ₹{int(budget_val)} into just the main product, this option gives you a strong primary setup while leaving room for useful training gear (approx ₹{int(sub_product_total)}) you'll actually use alongside it.\n")
-            
-            
-        lines.append("Please select an action:")
-
-        return {
-            "status": "primary_options",
-            "message": "\n".join(lines),
-            "options": options_list,
-            "avg_price": avg_price,
-            "min_price": min_price,
-            "max_price": stats["max_price"]
-        }
-
-    # =========================================================
-    # SECTION 4: BEGINNER / INTERMEDIATE — BUDGET BETWEEN AVG AND 2x AVERAGE (OR BELOW AVG)
-    # =========================================================
-    if budget_val > avg_price:
-        # Upper value range: 1.25 - 1.5 x avg_price
-        target_val = min(budget_val, avg_price * 1.35)
-        opt1_candidates = [p for p in candidates if p.price <= (avg_price * 1.5)]
-        if opt1_candidates:
-            opt1_p = min(opt1_candidates, key=lambda p: abs(p.price - target_val))
-        else:
-            opt1_p = min(candidates, key=lambda p: p.price)
+    remaining_candidates = [p for p in candidates if p.id != opt2_p.id]
+    if remaining_candidates:
+        opt1_p = min(remaining_candidates, key=lambda p: (abs(p.price - target_main_price), -p.rating))
     else:
-        opt1_p = min(candidates, key=lambda p: (abs(p.price - budget_val), -p.rating))
+        opt1_p = opt2_p
 
-    candidates_opt2 = [p for p in candidates if p.id != opt1_p.id]
-    if candidates_opt2:
-        opt2_p = max(candidates_opt2, key=lambda p: (p.rating, p.price))
-    else:
-        opt2_p = opt1_p
-
-    fmt1 = format_product_dict(opt2_p, merchant_map, sport=intent.sport, experience=intent.experience)
+    fmt1 = format_product_dict(opt1_p, merchant_map, sport=intent.sport, experience=intent.experience)
     fmt1["option_num"] = 1
     fmt1["option_type"] = "value_recommendation"
 
-    fmt2 = format_product_dict(opt1_p, merchant_map, sport=intent.sport, experience=intent.experience)
+    fmt2 = format_product_dict(opt2_p, merchant_map, sport=intent.sport, experience=intent.experience)
     fmt2["option_num"] = 2
-    fmt2["option_type"] = "best_within_budget"
+    fmt2["option_type"] = "highest_priced_within_budget"
 
     options_list = [fmt1]
     if fmt2["id"] != fmt1["id"]:
@@ -383,16 +376,16 @@ def build_primary_recommendations(
 
     sp_str = (intent.sport or "sports").capitalize()
     lines = []
-    lines.append(f"Top {sp_str} Primary Product Recommendations (Budget: ₹{int(budget_val)}):\n")
+    lines.append(f"Top {sp_str} Recommendations (Budget: ₹{int(budget_val)}):\n")
 
-    lines.append(f"Best-Value Recommendation — {fmt1['name']} — ₹{int(fmt1['price'])} (from {fmt1['merchant_name']})")
-    lines.append(f"• Rating: {fmt1['rating']}★ \n  key featuures of the product: {fmt1['attributes'] or 'Comfort & Value'}")
-    lines.append(f"• this product : Provides strong value and reliable quality without unnecessarily consuming your entire ₹{int(budget_val)} budget, leaving room for useful sports gear.\n\n\n")
+    lines.append(f"Recommendation 1 (Best-Value Product) — {fmt1['name']} — ₹{int(fmt1['price'])} (from {fmt1['merchant_name']})")
+    lines.append(f"• Rating: {fmt1['rating']}★ | Attributes: {fmt1['attributes'] or 'Comfort & Value'}")
+    lines.append(f"• Best Value Reasoning: Delivers solid performance without consuming your full budget.\n")
 
     if len(options_list) > 1:
-        lines.append(f"Best Product Within Budget — {fmt2['name']} — ₹{int(fmt2['price'])} (from {fmt2['merchant_name']})")
-        lines.append(f"• Rating: {fmt2['rating']}★ \n Attributes: {fmt2['attributes'] or 'High Quality'}")
-        lines.append(f"• The highest-quality suitable product available within your ₹{int(budget_val)} budget.\n")
+        lines.append(f"Recommendation 2 (Best Ranked & Highest Priced Within Budget) — {fmt2['name']} — ₹{int(fmt2['price'])} (from {fmt2['merchant_name']})")
+        lines.append(f"• Rating: {fmt2['rating']}★ | Attributes: {fmt2['attributes'] or 'Premium Build'}")
+        lines.append(f"• High Rank Reasoning: The highest-priced and top-rated primary product available within your ₹{int(budget_val)} budget.\n")
 
     lines.append("Please select an action:")
 
@@ -402,7 +395,7 @@ def build_primary_recommendations(
         "options": options_list,
         "avg_price": avg_price,
         "min_price": min_price,
-        "max_price": stats["max_price"]
+        "max_price": max_price
     }
 
 
@@ -436,14 +429,13 @@ def build_complementary_recommendations(
 ) -> dict:
     """
     Identifies dynamic cross-merchant add-on recommendations matching sport, budget, and experience level:
-    - CASE 1 (Beginner < min_price): cheapest useful products + highest rating.
-    - CASE 2 (Pro < min_price): highest rating + price.
-    - CASE 3 (budget < avg_price): rating + price.
-    - CASE 4 (avg_price <= budget <= 2x avg_price): highest rating + quality + price.
-    - CASE 5 OPTION A (budget > 2x avg_price & Best Value selected): construct sub-recommendation package
-      so total_sub_recommendation_cost maximizes budget utilization around user's total budget.
-    - CASE 5 OPTION B (budget > 2x avg_price & Max Product selected): highest rating + quality within remaining budget.
-    - Professionals: highest rating + performance quality.
+    - CASE 1 (Beginner < min_price): cheapest useful products + highest rating (UNTOUCHED).
+    - CASE 2 (Pro < min_price): highest rating + price (UNTOUCHED).
+    - CASE 3 (min_price <= budget < avg_price): highest rating + price (UNTOUCHED).
+    - CASE 4 (Beginner/Intermediate & budget >= avg_price):
+      * If Recommendation 1 (Best Value) selected: highest-priced sub-category products (-price, -rating) so total exceeds budget.
+      * If Recommendation 2 selected: highest-ranked sub-category products (-rating, -price).
+    - CASE 5 (Pro & budget >= avg_price): rating main filter, then price (-rating, -price).
     """
     merchant_map = {m.id: m for m in db.query(Merchant).all()}
     related_cats = intent.related_categories or []
@@ -457,60 +449,42 @@ def build_complementary_recommendations(
     avg_price = stats.get("avg_price", 0.0)
 
     option_type = selected_main.get("option_type", "")
-    is_best_value_selected = (selected_path == "option1") or ("best_value" in option_type) or ("balanced_deal" in option_type) or ("value_recommendation" in option_type)
+    is_best_value_selected = (selected_path == "option1") or ("value_recommendation" in option_type) or ("balanced_deal" in option_type)
 
     formatted_recs = []
     seen_ids = {selected_main.get("id")}
     exceeds_budget_warning = False
 
-    # CASE 5 OPTION A: Beginner/Intermediate + budget > 2x avg_price AND user chose "Best Value" / "Balanced Deal"
-    if not is_pro and budget_val > (2.0 * avg_price) and is_best_value_selected:
-        target_sub_budget = max(remaining_budget, budget_val - selected_main.get("price", 0.0))
-        
-        # Select best quality complementary items attempting to utilize target_sub_budget
-        for cat in related_cats:
-            items = search_products(db=db, category=cat)
-            if not items:
-                continue
-            # Sort by rating and price
+    for cat in related_cats:
+        items = search_products(db=db, category=cat)
+        if not items:
+            continue
+
+        if is_pro:
+            # CASE 2 & CASE 5 (Pro): rating as main filter, then price
             items.sort(key=lambda p: (-p.rating, -p.price))
-            for p in items:
-                if p.id not in seen_ids:
-                    seen_ids.add(p.id)
-                    fmt = format_product_dict(p, merchant_map, sport=intent.sport, experience=intent.experience)
-                    fmt["personalized_reason"] = get_personalized_recommendation_reason(p, sport=intent.sport, experience=intent.experience)
-                    formatted_recs.append(fmt)
-                    break
-    else:
-        # Sub-recommendations for Cases 1-4 & Case 5 Option B & Professionals
-        for cat in related_cats:
-            items = search_products(db=db, category=cat)
-            if not items:
-                continue
-
-            if is_pro or (budget_val < min_price and is_pro):
-                # CASE 2 & Professionals: highest rating, then price
-                items.sort(key=lambda p: (-p.rating, -p.price))
-            elif budget_val < min_price:
-                # CASE 1: Beginner/Intermediate below min -> cheapest useful products + highest rating
-                items.sort(key=lambda p: (p.price, -p.rating))
-            elif budget_val < avg_price:
-                # CASE 3: rating, then price
-                items.sort(key=lambda p: (-p.rating, -p.price))
-            elif avg_price <= budget_val <= (2.0 * avg_price):
-                # CASE 4: highest-rated products, quality, price
-                items.sort(key=lambda p: (-p.rating, -p.price))
+        elif budget_val < min_price:
+            # CASE 1: Beginner/Intermediate below min -> cheapest useful products + highest rating
+            items.sort(key=lambda p: (p.price, -p.rating))
+        elif budget_val < avg_price:
+            # CASE 3: rating, then price
+            items.sort(key=lambda p: (-p.rating, -p.price))
+        else:
+            # CASE 4: Beginner/Intermediate with budget >= avg_price
+            if is_best_value_selected:
+                # If User Clicks Recommendation 1 (Best Value): highest-priced sub-category products
+                items.sort(key=lambda p: (-p.price, -p.rating))
             else:
-                # CASE 5 OPTION B (Max Product selected): highest rating + quality within remaining budget
+                # If User Clicks Recommendation 2: highest-ranked sub-category products
                 items.sort(key=lambda p: (-p.rating, -p.price))
 
-            for p in items:
-                if p.id not in seen_ids:
-                    seen_ids.add(p.id)
-                    fmt = format_product_dict(p, merchant_map, sport=intent.sport, experience=intent.experience)
-                    fmt["personalized_reason"] = get_personalized_recommendation_reason(p, sport=intent.sport, experience=intent.experience)
-                    formatted_recs.append(fmt)
-                    break
+        for p in items:
+            if p.id not in seen_ids:
+                seen_ids.add(p.id)
+                fmt = format_product_dict(p, merchant_map, sport=intent.sport, experience=intent.experience)
+                fmt["personalized_reason"] = get_personalized_recommendation_reason(p, sport=intent.sport, experience=intent.experience)
+                formatted_recs.append(fmt)
+                break
 
     formatted_recs.sort(key=lambda x: x["price"])
 
@@ -533,13 +507,6 @@ def build_complementary_recommendations(
 
     if bundle_savings > 0:
         lines.append(f"Bundle Savings: You save ₹{int(bundle_savings)} off standard list prices across items!\n")
-
-    if is_best_value_selected and budget_val > (2.0 * avg_price):
-        lines.append(f"Optimal Package Budget Utilization: Combined total is ₹{int(grand_total)} (Target Budget: ₹{int(budget_val)}).")
-        if exceeds_budget_warning:
-            lines.append(f"⚠️ Note: This optimized package slightly exceeds your target budget by ₹{int(grand_total - budget_val)}. Explicit confirmation is required before proceeding.\n")
-        else:
-            lines.append(f"This package delivers maximum equipment utilization within your ₹{int(budget_val)} budget.\n")
 
     lines.append("Please select how you would like to proceed:")
     lines.append("• Add all recommended products")

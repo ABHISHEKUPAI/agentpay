@@ -52,7 +52,7 @@ export default function MerchantDashboard({ auditLogs }) {
                 <div class="metric-card glass">
                     <div class="metric-title">Total Revenue Generated</div>
                     <div class="metric-value">₹18,521</div>
-                    <div class="metric-sub">Across 3 Partner Merchants</div>
+                    <div class="metric-sub">Across 4 Partner Merchants (Amazon, Flipkart, Tata-cliq, Ajio)</div>
                 </div>
                 <div class="metric-card glass highlight-card">
                     <div class="metric-title">AI Recovered Revenue</div>

@@ -24,7 +24,7 @@ export default function App() {
             <header class="navbar">
                 <div class="logo">
                     <span class="logo-text">Agent<span class="highlight">Pay</span></span>
-                    <span class="tag">AI Commerce Engine</span>
+                    
                 </div>
                 
                 <nav class="nav-tabs">

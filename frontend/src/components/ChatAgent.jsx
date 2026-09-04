@@ -116,8 +116,7 @@ export default function ChatAgent({ conversationId, cart, setCart, setCurrentOrd
         <div class="chat-card">
             <div class="chat-header">
                 <div class="chat-header-title">
-                    <div class="status-indicator-dot" />
-                    <h2>Sports-Commerce AI Agent</h2>
+                    <h2>AI Agent</h2>
                 </div>
                 <p>Multi-merchant product comparison, value trade-offs & bounded budget gating.</p>
             </div>
