@@ -3,9 +3,7 @@
 AgentPay is an AI-powered commerce engine built on Razorpay APIs. It turns static merchant stores into AI-transactable endpoints, boosting merchant revenue through smart, budget-aware cross-selling and automated abandoned cart recovery.
 
 ---
-## What is AGENTPAY 
-
-Agentpay explained through a simple example 
+## AGENTPAY explained through a simple example 
 
 Suppose user wants a product say a running shoe. user tells the need to ai agent of AGENTPAY " i want a pair of running shoes" . AGENTPAY extracts users input and identifies the sports "running" then asks follo up questions "whats users budget" (5000,4000 etc) and how exerienced the user is (professional,Intermediate, beginner )" and then based on the information user has given AGENTPAY's primaryrecomendation system gets called which comprises of 5 search algorithm select primary product (running shoes) and secondary recomended list of products (socks, head-band,shorts etc) that are related to the sports (running in this example) and recomend it in such a way that the users need as well as purpose is satisfied and moreover makes user buy products near to or above the budget provided in the beginning of the session .
 
