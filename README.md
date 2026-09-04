@@ -1,51 +1,38 @@
 # AgentPay: AI Growth & Agentic Commerce Engine
- 
-Goal: Grow merchant revenue and make merchant catalogs transactable by autonomous AI buyers on Razorpay test-mode APIs at the same time provide and satisfy user with necessary products.
 
-
----
-## Impact of this project and how this idea was developed
-
-Customers are attracted based on trust and satisfaction they recieve.I believe if a system can provide that to users naturally the entire business eco-system develops . 
-
-This project is inspired by a personal experience from my first year of university.
-
-As a freshman studying far from home, I was still unfamiliar with the routes and nearby railway stations. One day, I was in a hurry to catch a train at a railway station, which was nearly 15 km away. I booked a taxi, hoping that I would reach the station on time. However, during the journey, the driver asked me about my destination and the reason for my trip. After understanding my situation, he suggested that I take a nearby railway station instead.
-
-The driver would have earned an additional ₹150 if he had driven me all the way to my original destination. Instead, he checked whether my train stopped at the nearby station, confirmed that it did, and took me there. Fortunately, I reached the station five minutes before my train and saved ₹150.
-
-At first glance, it may seem like the driver took a loss by helping me. However, that single decision created trust. Since that first ride, I have travelled with him more than 20 times to different locations, generating significantly more value for him than the ₹150 he gave up that day.
-
-This experience became the core idea behind my project.
-
-Instead of simply recommending the most expensive product or maximizing the value of a single transaction, the system is designed to understand the user's actual needs and find the most useful products for them. It can recommend alternatives that may be cheaper, suggest complementary products that provide additional value, and, when appropriate, encourage users to consider products slightly above their initial budget by clearly highlighting the additional value they provide.
-
-The underlying philosophy is simple: a transaction should not be optimized only for the immediate purchase. It should create value for all three sides — the user, the merchant, and the platform.
-
-For the user, the goal is to discover products that genuinely fit their needs and provide meaningful value. For merchants, the system can increase the likelihood of a purchase by presenting relevant products and useful alternatives. For the platform, this creates opportunities for higher-value transactions while maintaining a positive user experience.
-
-Just like the taxi driver who gave up ₹150 in the short term but gained a long-term customer through a helpful decision, this project follows the principle that creating value for the user can ultimately create greater value for everyone involved.
-
-This is the approach I have tried to incorporate into the search and recommendation algorithm of this project.
+AgentPay is an AI-powered commerce engine built on Razorpay APIs. It turns static merchant stores into AI-transactable endpoints, boosting merchant revenue through smart, budget-aware cross-selling and automated abandoned cart recovery.
 
 ---
-## Overview & Context
+## What is AGENTPAY 
 
-With emerging agentic protocols (such as NPCI's Unified Agentic Protocol, ACP, AP2, and x402), e-commerce is expanding from manual browser-based shopping to autonomous AI-driven transactions.
+Agentpay explained through a simple example 
 
-Existing platforms face three primary integration challenges:
-1. **Unreadable Catalogs:** Standard storefronts lack structured, agent-friendly query interfaces for automated product discovery and bundle creation.
-2. **Suboptimal Revenue Capture:** Basic search engines fail to perform dynamic, budget-aware cross-selling and accessory matching.
-3. **Unbounded Payment Execution:** Autonomous financial actions require clear boundaries, auditability, and explicit execution gating.
+Suppose user wants a product say a running shoe. user tells the need to ai agent of AGENTPAY " i want a pair of running shoes" . AGENTPAY extracts users input and identifies the sports "running" then asks follo up questions "whats users budget" (5000,4000 etc) and how exerienced the user is (professional,Intermediate, beginner )" and then based on the information user has given AGENTPAY's primaryrecomendation system gets called which comprises of 5 search algorithm select primary product (running shoes) and secondary recomended list of products (socks, head-band,shorts etc) that are related to the sports (running in this example) and recomend it in such a way that the users need as well as purpose is satisfied and moreover makes user buy products near to or above the budget provided in the beginning of the session .
 
-AgentPay addresses these gaps by providing an agent-readable commerce backend, a conversational recommendation engine, and a gated payment flow powered by Razorpay APIs.
+* The base algorithm :- Every algorithm is based on this base algorithm 
+algorithms/Base_algorithm.png
+
+* ALGORITHM 1:- user is a Beginner with a budget less than least expensive product
+algorithms/ALGORITHM_1.png
+
+* ALGORITHM 2:- user is a rofessional with budget less than least expensive product 
+algorithms/ALGORITHM_2.png
+
+* ALGORITHM 3:- user belongs to any experience level with budget between least expensive and average price of that perticular product in the entire database 
+algorithms/ALGORITHM_3.png
+
+* ALGORITHM 4:- user is beginner with bugdget above average price of that perticular product in entire database
+algorithms/ALGORITHM_4.png
+
+* ALGORITHM 5:- user is a professional with budget above average price of that perticular product in the entire database 
+algorithms/ALGORITHM_5.png
 
 ---
 
 ## Key Capabilities
 
 ### 1. Conversational Shopping & Budget Allocation
-- Supports 5 persona and budget decision cases based on user expertise (*Beginner, Intermediate, Pro*) and specified budget parameters.
+- Supports 5 persona and budget decision cases based on user expertise (*Beginner, Intermediate, Professional*) and specified budget parameters.
 - Recommends primary products alongside compatible accessories (e.g., Badminton Racket + Shuttlecocks + Grip).
 - Calculates target budget allocation dynamically (`Target Price = Budget - Accessories Cost`) to optimize basket value within user bounds.
 
@@ -72,6 +59,31 @@ AgentPay addresses these gaps by providing an agent-readable commerce backend, a
 - Exposes a recovery endpoint (`/api/recovery`) to restore carts and re-issue checkout tokens without data loss.
 
 ---
+
+## Impact of this project and how this idea was developed
+
+Customers are attracted based on trust and satisfaction they recieve.I believe if a system can provide that to users naturally the entire business eco-system develops . 
+
+This project is inspired by a personal experience from my first year of university.
+
+As a freshman studying far from home, I was still unfamiliar with the routes and nearby railway stations. One day, I was in a hurry to catch a train at a railway station, which was nearly 15 km away. I booked a taxi, hoping that I would reach the station on time. However, during the journey, the driver asked me about my destination and the reason for my trip. After understanding my situation, he suggested that I take a nearby railway station instead.
+
+The driver would have earned an additional ₹150 if he had driven me all the way to my original destination. Instead, he checked whether my train stopped at the nearby station, confirmed that it did, and took me there. Fortunately, I reached the station five minutes before my train and saved ₹150.
+
+At first glance, it may seem like the driver took a loss by helping me. However, that single decision created trust. Since that first ride, I have travelled with him more than 20 times to different locations, generating significantly more value for him than the ₹150 he gave up that day.
+
+This experience became the core idea behind my project.
+
+Instead of simply recommending the most expensive product or maximizing the value of a single transaction, the system is designed to understand the user's actual needs and find the most useful products for them. It can recommend alternatives that may be cheaper, suggest complementary products that provide additional value, and, when appropriate, encourage users to consider products slightly above their initial budget by clearly highlighting the additional value they provide.
+
+The underlying philosophy is simple: a transaction should not be optimized only for the immediate purchase. It should create value for all three sides — the user, the merchant, and the platform.
+
+For the user, the goal is to discover products that genuinely fit their needs and provide meaningful value. For merchants, the system can increase the likelihood of a purchase by presenting relevant products and useful alternatives. For the platform, this creates opportunities for higher-value transactions while maintaining a positive user experience.
+
+Just like the taxi driver who gave up ₹150 in the short term but gained a long-term customer through a helpful decision, this project follows the principle that creating value for the user can ultimately create greater value for everyone involved.
+
+This is the approach I have tried to incorporate into the search and recommendation algorithm of this project.
+
 
 ## Tech Stack
 
@@ -110,22 +122,26 @@ agentpay/
 
 ## Local Setup Guide
 
-Follow these steps to set up and run AgentPay locally:
-
 ### Prerequisites
+- **Git**
 - **Python 3.10+** (Python 3.12 recommended)
 - **Node.js** (v18+ or v20+) and **npm**
 
 ---
-### Core algorithm in simple words (also refer to the flow diagrams i )
+
+### Step 1: Clone the Repository
+```bash
+git clone git@github.com:ABHISHEKUPAI/agentpay.git
+cd agentpay
+```
 
 ---
 
-### Step 1: Backend Setup
+### Step 2: Backend Setup & Configuration
 
-1. Open a terminal and navigate to the backend directory:
+1. Navigate to the backend directory:
    ```bash
-   cd agentpay/backend
+   cd backend
    ```
 
 2. Create and activate a Python virtual environment:
@@ -145,20 +161,27 @@ Follow these steps to set up and run AgentPay locally:
    pip install -r requirements.txt
    ```
 
-4. Seed the database with the 4-merchant catalog data:
+4. Create environment configuration file (`backend/.env`):
+   ```bash
+   cat <<EOT > .env
+   DATABASE_URL=sqlite:///./agentpay.db
+   GEMINI_API_KEY=*********************
+   ```
+
+5. Seed the database with merchant catalog data:
    ```bash
    PYTHONPATH=. python app/seed.py
    ```
 
-5. Start the FastAPI development server:
+6. Start the FastAPI development server:
    ```bash
    uvicorn app.main:app --reload --port 8000
    ```
-   The backend API will be available at `http://localhost:8000`.
+   The backend API will run at `http://localhost:8000`.
 
 ---
 
-### Step 2: Frontend Setup
+### Step 3: Frontend Setup
 
 1. Open a second terminal window and navigate to the frontend directory:
    ```bash
@@ -178,7 +201,7 @@ Follow these steps to set up and run AgentPay locally:
 
 ---
 
-### Step 3: Verification & Usage
+### Step 4: Verification & Usage
 
 1. Access the web interface at `http://localhost:5173`.
 2. **Shopper AI Agent:** Enter budget parameters and sports preferences to evaluate product recommendations and observe cart synchronization.
