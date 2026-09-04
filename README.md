@@ -1,10 +1,34 @@
 # AgentPay: AI Growth & Agentic Commerce Engine
+ 
+Goal: Grow merchant revenue and make merchant catalogs transactable by autonomous AI buyers on Razorpay test-mode APIs at the same time provide and satisfy user with necessary products.
 
-Track: AI Growth & Agentic Commerce  
-Goal: Grow merchant revenue and make merchant catalogs transactable by autonomous AI buyers on Razorpay test-mode APIs.
 
 ---
+## Impact of this project and how this idea was developed
 
+Customers are attracted based on trust and satisfaction they recieve.I believe if a system can provide that to users naturally the entire business eco-system develops . 
+
+This project is inspired by a personal experience from my first year of university.
+
+As a freshman studying far from home, I was still unfamiliar with the routes and nearby railway stations. One day, I was in a hurry to catch a train at a railway station, which was nearly 15 km away. I booked a taxi, hoping that I would reach the station on time. However, during the journey, the driver asked me about my destination and the reason for my trip. After understanding my situation, he suggested that I take a nearby railway station instead.
+
+The driver would have earned an additional ₹150 if he had driven me all the way to my original destination. Instead, he checked whether my train stopped at the nearby station, confirmed that it did, and took me there. Fortunately, I reached the station five minutes before my train and saved ₹150.
+
+At first glance, it may seem like the driver took a loss by helping me. However, that single decision created trust. Since that first ride, I have travelled with him more than 20 times to different locations, generating significantly more value for him than the ₹150 he gave up that day.
+
+This experience became the core idea behind my project.
+
+Instead of simply recommending the most expensive product or maximizing the value of a single transaction, the system is designed to understand the user's actual needs and find the most useful products for them. It can recommend alternatives that may be cheaper, suggest complementary products that provide additional value, and, when appropriate, encourage users to consider products slightly above their initial budget by clearly highlighting the additional value they provide.
+
+The underlying philosophy is simple: a transaction should not be optimized only for the immediate purchase. It should create value for all three sides — the user, the merchant, and the platform.
+
+For the user, the goal is to discover products that genuinely fit their needs and provide meaningful value. For merchants, the system can increase the likelihood of a purchase by presenting relevant products and useful alternatives. For the platform, this creates opportunities for higher-value transactions while maintaining a positive user experience.
+
+Just like the taxi driver who gave up ₹150 in the short term but gained a long-term customer through a helpful decision, this project follows the principle that creating value for the user can ultimately create greater value for everyone involved.
+
+This is the approach I have tried to incorporate into the search and recommendation algorithm of this project.
+
+---
 ## Overview & Context
 
 With emerging agentic protocols (such as NPCI's Unified Agentic Protocol, ACP, AP2, and x402), e-commerce is expanding from manual browser-based shopping to autonomous AI-driven transactions.
@@ -91,6 +115,9 @@ Follow these steps to set up and run AgentPay locally:
 ### Prerequisites
 - **Python 3.10+** (Python 3.12 recommended)
 - **Node.js** (v18+ or v20+) and **npm**
+
+---
+### Core algorithm in simple words (also refer to the flow diagrams i )
 
 ---
 
