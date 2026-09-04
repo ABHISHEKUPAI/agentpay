@@ -293,6 +293,7 @@ def buyer_chat(
                 "message": f"{conf_msg}\n\n{cross_res['message']}",
                 "selected_primary": chosen,
                 "products": cross_res["products"],
+                "cart": state.cart,
                 "individual_total": cross_res["individual_total"],
                 "bundle_total": cross_res["bundle_total"],
                 "bundle_savings": cross_res["bundle_savings"],
@@ -332,6 +333,7 @@ def buyer_chat(
                 "message": f"{conf_msg}\n\n{cross_res['message']}",
                 "selected_primary": chosen,
                 "products": cross_res["products"],
+                "cart": state.cart,
                 "individual_total": cross_res["individual_total"],
                 "bundle_total": cross_res["bundle_total"],
                 "bundle_savings": cross_res["bundle_savings"],
@@ -497,6 +499,7 @@ def buyer_chat(
                 "conversation_id": request.conversation_id,
                 "message": low_res["message"],
                 "product": low_res["product"],
+                "cart": state.cart,
                 "checkout_gated": True
             }
 
