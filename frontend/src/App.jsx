@@ -71,6 +71,7 @@ export default function App() {
                     setCart={setCart}
                     setCurrentOrderData={setCurrentOrderData}
                     updateAuditLog={setAuditLogs}
+                    openRazorpayModal={() => setIsRzpOpen(true)}
                 />
                 <CartDrawer
                     conversationId={conversationId}

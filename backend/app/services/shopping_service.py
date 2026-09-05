@@ -77,8 +77,9 @@ def search_products(
 def format_product_dict(p: Product, merchant_map: dict, sport: str | None = None, experience: str | None = None) -> dict:
     m = merchant_map.get(p.merchant_id)
     m_name = m.name if m else f"Merchant #{p.merchant_id}"
-    disc_pct = m.max_discount if (m and m.max_discount) else 15.0
-    orig_price = round(p.price / (1.0 - (disc_pct / 100.0)), 2)
+    max_cap = m.max_discount if (m and m.max_discount) else 15.0
+    standard_disc_pct = 8.0  # 8% initial storefront discount, leaving 7% headroom under 15% policy cap
+    orig_price = round(p.price / (1.0 - (standard_disc_pct / 100.0)), 2)
     savings = round(orig_price - p.price, 2)
     
     sp = (sport or "sports").capitalize()
@@ -99,7 +100,8 @@ def format_product_dict(p: Product, merchant_map: dict, sport: str | None = None
         "category": p.category,
         "price": p.price,
         "original_price": orig_price,
-        "discount_percent": disc_pct,
+        "discount_percent": standard_disc_pct,
+        "max_discount_cap": max_cap,
         "savings": savings,
         "rating": p.rating,
         "attributes": p.attributes,

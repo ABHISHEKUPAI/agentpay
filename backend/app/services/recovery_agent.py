@@ -157,7 +157,7 @@ def register_abandoned_cart(session_id: str, cart: list[dict], user_goal: str = 
 def trigger_recovery_intervention(session_id: str) -> dict:
     """
     Execute a bounded recovery intervention workflow.
-    Enforces Stopping Rule: Max 1 intervention per session.
+    Enforces Stopping Rule (Max 1 intervention) & Policy Caps (Max 15% discount off MRP).
     """
     if session_id not in abandoned_sessions:
         return {
@@ -176,21 +176,46 @@ def trigger_recovery_intervention(session_id: str) -> dict:
             "intervention_allowed": False
         }
 
+    raw_total, orig_total, savings = session.get_totals()
+    existing_disc_pct = round(((orig_total - raw_total) / orig_total * 100), 2) if orig_total > 0 else 8.0
+    max_discount_cap = 15.0
+    max_allowed_flash = max(0.0, max_discount_cap - existing_disc_pct)
+
+    # POLICY CAP CHECK: Block flash offer if cart already exceeds or meets max_discount policy cap
+    if max_allowed_flash <= 0:
+        audit_entry = {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "action": "RECOVERY_INTERVENTION_BLOCKED_POLICY_CAP",
+            "session_id": session_id,
+            "existing_discount_percent": existing_disc_pct,
+            "max_discount_cap": max_discount_cap,
+            "max_discount_cap_enforced": True,
+            "bounded_reason": "Cart items already at or above maximum 15% discount limit. Flash discount blocked to protect merchant margins."
+        }
+        session.audit_history.append(audit_entry)
+        return {
+            "status": "policy_cap_blocked",
+            "session_id": session_id,
+            "message": "Policy Cap Enforced: Items in cart are already at maximum allowed discount cap of 15%. Additional flash discounts blocked to protect merchant margins.",
+            "audit_entry": audit_entry
+        }
+
+    flash_discount = min(5.0, max_allowed_flash)
     session.intervention_count += 1
     session.status = "intervened"
-    session.flash_discount_percent = 5.0  # 5% bounded flash recovery incentive
+    session.flash_discount_percent = flash_discount
 
-    raw_total, orig_total, savings = session.get_totals()
-    extra_flash_savings = round(raw_total * 0.05, 2)
+    extra_flash_savings = round(raw_total * (flash_discount / 100.0), 2)
     new_total = round(raw_total - extra_flash_savings, 2)
     new_total_savings = round(savings + extra_flash_savings, 2)
+    total_combined_discount_pct = round(existing_disc_pct + flash_discount, 2)
 
     intervention_message = (
-        f"🏃 Hey there! We noticed you left ₹{savings} in savings in your cart for your {session.user_goal} setup!\n\n"
-        f"To help you achieve your fitness goals today, we've applied an **Exclusive 5% Extra Flash Discount** to your cart.\n\n"
+        f"Hey there! We noticed you left ₹{savings} in savings in your cart for your {session.user_goal} setup!\n\n"
+        f"To help you achieve your fitness goals today, we've applied an **Exclusive {flash_discount}% Extra Flash Discount** to your cart.\n\n"
         f"• Original Cart Value: ₹{raw_total}\n"
-        f"• Flash Discount Special: **₹{new_total}** (You Save a Total of **₹{new_total_savings}**!)\n\n"
-        f"⚡ Would you like to complete your order with this limited-time flash offer?"
+        f"• Flash Discount Special:₹{new_total} (You Save a Total of **₹{new_total_savings}**!)\n\n"
+        f"Would you like to complete your order with this limited-time flash offer?"
     )
 
     audit_entry = {
@@ -199,7 +224,9 @@ def trigger_recovery_intervention(session_id: str) -> dict:
         "session_id": session_id,
         "intervention_count": session.intervention_count,
         "stopping_rule_limit": 1,
-        "flash_discount_applied": 5.0,
+        "flash_discount_applied": flash_discount,
+        "total_combined_discount_percent": total_combined_discount_pct,
+        "max_discount_cap_enforced": True,
         "additional_discount_inr": extra_flash_savings,
         "new_cart_total_inr": new_total,
         "compliant_escalation": True

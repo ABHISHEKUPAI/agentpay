@@ -69,8 +69,8 @@ export default function CartDrawer({ conversationId, cart, openRazorpayModal, se
                         <span>Final Amount Payable:</span>
                         <span>₹{Math.round(totalFinal)}</span>
                     </div>
-
-                    {/* <button class="btn-checkout" onClick={handleProceedCheckout}>
+{/* 
+                    <button className="btn-checkout" onClick={handleProceedCheckout}>
                         Pay via Razorpay Test Mode
                     </button> */}
                 </div>
